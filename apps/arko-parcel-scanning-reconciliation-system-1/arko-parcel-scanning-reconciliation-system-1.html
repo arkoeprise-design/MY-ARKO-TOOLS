@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARKO - Parcel Scanning & Reconciliation System</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- html2pdf.js for generating PDF reports -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        arko: {
+                            50: '#f0f4ff',
+                            100: '#e0e9fe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#0f172a',
+                            dark: '#0b0f19'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Pulse border animation for barcode field focus */
+        @keyframes scanPulse {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .scan-active {
+            animation: scanPulse 2s infinite;
+        }
+        /* Flash animations for audio/visual feedback */
+        .flash-success { animation: flashGreen 0.6s ease-out; }
+        .flash-warning { animation: flashYellow 0.6s ease-out; }
+        .flash-danger { animation: flashRed 0.6s ease-out; }
+
+        @keyframes flashGreen {
+            0% { background-color: rgba(34, 197, 94, 0.25); }
+            100% { background-color: transparent; }
+        }
+        @keyframes flashYellow {
+            0% { background-color: rgba(234, 179, 8, 0.25); }
+            100% { background-color: transparent; }
+        }
+        @keyframes flashRed {
+            0% { background-color: rgba(239, 68, 68, 0.25); }
+            100% { background-color: transparent; }
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-blue-600 selection:text-white">
+
+    <!-- TOP HEADER / BRAND BAR -->
+    <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 shadow-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 text-white font-extrabold px-3 py-1.5 rounded-lg text-xl tracking-wider shadow-lg shadow-blue-500/20 flex items-center gap-2">
+                    <i class="fa-solid fa-boxes-packing"></i> ARKO
+                </div>
+                <div>
+                    <h1 class="text-sm font-bold text-slate-200 tracking-wide uppercase">Parcel Scanning & Reconciliation</h1>
+                    <p class="text-xs text-slate-400 flex items-center gap-2">
+                        <span>Batch ID: <span id="currentBatchId" class="font-mono text-blue-400 font-semibold">DEL-20261103-001</span></span>
+                        <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        <span id="sessionTimestamp" class="text-slate-400">00:00:00</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- ACTION CONTROL HUB -->
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <button onclick="openRulesModal()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-slate-700">
+                    <i class="fa-solid fa-sliders text-blue-400"></i> <span class="hidden md:inline">Prefix</span> Rules
+                </button>
+                <button onclick="confirmNewBatch()" class="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-rotate-right"></i> New Batch
+                </button>
+                <button onclick="generateCurrentPDF()" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs flex items-center gap-2 shadow-lg shadow-blue-600/30 transition">
+                    <i class="fa-solid fa-file-pdf"></i> Generate Report
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN OPERATIONAL WORKSPACE -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col gap-6" id="mainContainer">
+
+        <!-- WORKFLOW NAVIGATION TABS (Rule 2: 3 Logically Independent Modules) -->
+        <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl">
+            <button id="tab-delivery" onclick="switchWorkflow('delivery')" class="py-3 px-4 rounded-lg font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all duration-200 bg-blue-600 text-white shadow-lg">
+                <i class="fa-solid fa-truck-ramp-box"></i>
+                <span>1. DELIVERY</span>
+                <span id="badge-delivery-count" class="ml-1 px-2 py-0.5 bg-blue-900/80 text-blue-200 text-xs rounded-full font-mono">0</span>
+            </button>
+            <button id="tab-undelivered" onclick="switchWorkflow('undelivered')" class="py-3 px-4 rounded-lg font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 text-sm sm:text-base flex items-center justify-center gap-2 transition-all duration-200">
+                <i class="fa-solid fa-ban"></i>
+                <span>2. UNDELIVERED</span>
+                <span id="badge-undelivered-count" class="ml-1 px-2 py-0.5 bg-slate-800 text-slate-400 text-xs rounded-full font-mono">0</span>
+            </button>
+            <button id="tab-rto" onclick="switchWorkflow('rto')" class="py-3 px-4 rounded-lg font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 text-sm sm:text-base flex items-center justify-center gap-2 transition-all duration-200">
+                <i class="fa-solid fa-arrows-rotate text-amber-500"></i>
+                <span>3. RTO / RETURN</span>
+                <span id="badge-rto-count" class="ml-1 px-2 py-0.5 bg-slate-800 text-slate-400 text-xs rounded-full font-mono">0</span>
+            </button>
+        </div>
+
+        <!-- HIGH-VISIBILITY SCANNING & REALTIME STATS METRICS BLOCK -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- LEFT 2 COLUMNS: BARCODE SCANNER INTERFACE & LIVE FEED -->
+            <div class="lg:col-span-2 flex flex-col gap-4">
+
+                <!-- BARCODE INPUT BOX CONTAINER -->
+                <div id="scanCard" class="bg-slate-900 border-2 border-blue-500/50 rounded-2xl p-4 sm:p-6 shadow-2xl relative transition-all duration-300">
+                    <div class="flex items-center justify-between mb-2">
+                        <label for="barcodeInput" id="scannerLabel" class="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-2">
+                            <i class="fa-solid fa-barcode text-base"></i> READY TO SCAN DELIVERY PARCELS
+                        </label>
+                        <span id="scanModeIndicator" class="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-mono font-semibold rounded uppercase">
+                            Auto Focus Lock Enabled
+                        </span>
+                    </div>
+
+                    <!-- BARCODE INPUT FIELD -->
+                    <div class="relative flex items-center">
+                        <input type="text" 
+                               id="barcodeInput" 
+                               autocomplete="off" 
+                               spellcheck="false"
+                               placeholder="Scan AWB / Tracking ID (e.g., 1490..., 5931..., ASF...)" 
+                               class="w-full bg-slate-950 border-2 border-slate-700 focus:border-blue-500 text-slate-100 font-mono text-lg sm:text-2xl font-bold py-3.5 px-4 pl-12 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition scan-active placeholder:text-slate-600 uppercase"
+                               onkeydown="handleScanKeydown(event)">
+                        <i class="fa-solid fa-qrcode absolute left-4 text-slate-500 text-xl pointer-events-none"></i>
+                        <button onclick="processManualScan()" class="absolute right-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition">
+                            Submit Scan
+                        </button>
+                    </div>
+
+                    <!-- REAL-TIME SCAN FEEDBACK BANNER (Section 25) -->
+                    <div id="scanFeedback" class="mt-3 p-3 rounded-xl border flex items-center justify-between bg-slate-950/80 border-slate-800 text-slate-400 text-sm font-medium transition-all duration-200">
+                        <div class="flex items-center gap-3">
+                            <div id="feedbackIcon" class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
+                                <i class="fa-solid fa-arrow-down-long"></i>
+                            </div>
+                            <div>
+                                <span id="feedbackTitle" class="font-bold block text-slate-300">Scanner Ready</span>
+                                <span id="feedbackSub" class="text-xs text-slate-500">Scan any AWB barcode. Rules automatically match marketplace & courier.</span>
+                            </div>
+                        </div>
+                        <span id="feedbackTag" class="hidden px-2 py-1 rounded text-xs font-mono font-bold uppercase"></span>
+                    </div>
+                </div>
+
+                <!-- LIVE SCAN RECENT LOG TABLE -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col flex-1 shadow-lg">
+                    <div class="flex items-center justify-between mb-3 px-1">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-list-ol text-blue-400"></i> Live Scan Log (<span id="scanLogCount">0</span>)
+                        </h2>
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="text-slate-500">Filter:</span>
+                            <select id="logFilter" onchange="renderScanLogs()" class="bg-slate-950 border border-slate-800 text-slate-300 rounded px-2 py-1 focus:outline-none">
+                                <option value="ALL">All Items</option>
+                                <option value="Meesho">Meesho Only</option>
+                                <option value="Flipkart">Flipkart Only</option>
+                                <option value="UNKNOWN">Unknown Prefix</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- LOG CONTAINER TABLE -->
+                    <div class="overflow-y-auto max-h-[360px] border border-slate-800/80 rounded-xl">
+                        <table class="w-full text-left text-xs font-mono">
+                            <thead class="bg-slate-950 text-slate-400 uppercase sticky top-0 border-b border-slate-800">
+                                <tr>
+                                    <th class="py-2.5 px-3">#</th>
+                                    <th class="py-2.5 px-3">AWB / Tracking ID</th>
+                                    <th class="py-2.5 px-3">Platform</th>
+                                    <th class="py-2.5 px-3">Courier</th>
+                                    <th class="py-2.5 px-3 text-center">Status</th>
+                                    <th class="py-2.5 px-3 text-right">Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scanLogTbody" class="divide-y divide-slate-800/50 text-slate-300">
+                                <tr>
+                                    <td colspan="6" class="py-12 text-center text-slate-500 font-sans">
+                                        <i class="fa-solid fa-box-open text-3xl mb-2 block opacity-40"></i>
+                                        No parcels scanned yet in this session. Start scanning above!
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT 1 COLUMN: LIVE RECONCILIATION DASHBOARD (Section 22) -->
+            <div class="flex flex-col gap-4">
+
+                <!-- RECONCILIATION SUMMARY CARD -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+                    <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                        <span><i class="fa-solid fa-chart-pie text-blue-400 mr-1.5"></i> Live Reconciliation</span>
+                        <span id="reconcileModuleBadge" class="text-[10px] bg-blue-900/60 text-blue-300 border border-blue-700/50 px-2 py-0.5 rounded font-mono uppercase">Delivery Mode</span>
+                    </h2>
+
+                    <!-- 3 MAIN RECONCILIATION COUNTERS -->
+                    <div class="grid grid-cols-1 gap-2.5">
+                        <!-- INITIAL SCANNED -->
+                        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
+                            <div>
+                                <p class="text-[11px] font-semibold text-slate-400 uppercase">1. Initial Delivery Scanned</p>
+                                <p class="text-[10px] text-slate-500">Total Unique AWBs in Delivery</p>
+                            </div>
+                            <span id="statInitialCount" class="text-2xl font-extrabold font-mono text-slate-100">0</span>
+                        </div>
+
+                        <!-- UNDELIVERED DEDUCTION -->
+                        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
+                            <div>
+                                <p class="text-[11px] font-semibold text-rose-400 uppercase">2. Undelivered Parcels (-)</p>
+                                <p class="text-[10px] text-slate-500">Deducted from initial batch</p>
+                            </div>
+                            <span id="statUndeliveredCount" class="text-2xl font-extrabold font-mono text-rose-400">0</span>
+                        </div>
+
+                        <!-- FINAL RECONCILED DELIVERY COUNT -->
+                        <div class="bg-gradient-to-r from-blue-950/60 to-slate-900 border border-blue-500/30 rounded-xl p-4 flex items-center justify-between shadow-lg">
+                            <div>
+                                <p class="text-xs font-bold text-blue-400 uppercase tracking-wide">3. Final Net Handover</p>
+                                <p class="text-[10px] text-slate-400">Formula: Initial − Undelivered</p>
+                            </div>
+                            <div class="text-right">
+                                <span id="statFinalCount" class="text-3xl font-black font-mono text-emerald-400">0</span>
+                                <span class="block text-[10px] text-slate-400 font-sans">Ready for PDF</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RTO SEPARATE BOX -->
+                    <div class="mt-1 pt-3 border-t border-slate-800/80">
+                        <div class="bg-amber-950/30 border border-amber-500/20 rounded-xl p-3 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-arrows-rotate text-amber-500 text-lg"></i>
+                                <div>
+                                    <p class="text-xs font-bold text-amber-400 uppercase">RTO / Return Count</p>
+                                    <p class="text-[10px] text-slate-500">Independent workflow session</p>
+                                </div>
+                            </div>
+                            <span id="statRtoCount" class="text-2xl font-bold font-mono text-amber-400">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BREAKDOWN BY PLATFORM & COURIER -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-layer-group text-blue-400"></i> Scanned Breakdown (Active View)
+                        </h3>
+
+                        <!-- PLATFORM BREAKDOWN GRID -->
+                        <div class="space-y-2 mb-4">
+                            <p class="text-[10px] text-slate-500 uppercase font-semibold">By Marketplace Platform</p>
+                            <div id="platformBreakdown" class="space-y-1.5">
+                                <div class="text-xs text-slate-500 italic py-1">No scan data mapped yet.</div>
+                            </div>
+                        </div>
+
+                        <!-- COURIER BREAKDOWN GRID -->
+                        <div class="space-y-2">
+                            <p class="text-[10px] text-slate-500 uppercase font-semibold">By Courier Partner</p>
+                            <div id="courierBreakdown" class="space-y-1.5">
+                                <div class="text-xs text-slate-500 italic py-1">No scan data mapped yet.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- UNKNOWN / UNMAPPED WARNING -->
+                    <div id="unknownWarningBox" class="hidden mt-4 p-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-300 text-xs">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation"></i> Unmapped AWBs (<span id="unknownCount">0</span>)</span>
+                            <button onclick="openRulesModal()" class="underline text-[10px] hover:text-rose-200">Add Prefix Rule</button>
+                        </div>
+                        <p class="text-[11px] text-rose-400">Some scanned barcodes did not match any prefix rules.</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- CONFIGURABLE PREFIX RULES MODAL (Section 6 & 32) -->
+    <div id="rulesModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-blue-500 text-lg"></i>
+                    <h3 class="text-base font-bold text-slate-100">Configurable AWB Classification Rules</h3>
+                </div>
+                <button onclick="closeRulesModal()" class="text-slate-400 hover:text-white p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <div class="p-6 overflow-y-auto space-y-6">
+                <!-- ADD NEW RULE FORM -->
+                <div class="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                    <h4 class="text-xs font-bold text-blue-400 uppercase tracking-wide mb-3">Add New Prefix Mapping</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-[10px] text-slate-400 font-semibold mb-1">AWB Prefix</label>
+                            <input type="text" id="newRulePrefix" placeholder="e.g., 1490 or ASF" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono uppercase focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-400 font-semibold mb-1">Platform Name</label>
+                            <input type="text" id="newRulePlatform" placeholder="e.g., Meesho or Flipkart" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-400 font-semibold mb-1">Courier Partner</label>
+                            <input type="text" id="newRuleCourier" placeholder="e.g., Delivery or E-CART" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+                    <div class="mt-3 flex justify-end">
+                        <button onclick="addNewRule()" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg flex items-center gap-1.5">
+                            <i class="fa-solid fa-plus"></i> Save Mapping Rule
+                        </button>
+                    </div>
+                </div>
+
+                <!-- EXISTING RULES TABLE -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wide">Active Prefix Rules</h4>
+                        <button onclick="resetRulesToDefault()" class="text-[11px] text-slate-500 hover:text-amber-400 underline">Reset Defaults</button>
+                    </div>
+                    <div class="border border-slate-800 rounded-xl overflow-hidden">
+                        <table class="w-full text-left text-xs font-mono">
+                            <thead class="bg-slate-950 text-slate-400 border-b border-slate-800">
+                                <tr>
+                                    <th class="p-3">Prefix</th>
+                                    <th class="p-3">Platform</th>
+                                    <th class="p-3">Courier Partner</th>
+                                    <th class="p-3 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rulesTableBody" class="divide-y divide-slate-800 text-slate-300">
+                                <!-- Dynamic Rules populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 py-3 bg-slate-950 border-t border-slate-800 flex justify-end">
+                <button onclick="closeRulesModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PRINTABLE PDF HIDDEN TEMPLATE CONTAINER (Section 15, 16, 19) -->
+    <div class="hidden">
+        <div id="pdfContainer" class="bg-white text-slate-900 p-8 font-sans w-[800px]">
+            <!-- HEADER -->
+            <div class="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
+                <div>
+                    <h1 class="text-3xl font-black text-blue-900 tracking-tight">ARKO LOGISTICS</h1>
+                    <p class="text-xs text-slate-600 font-bold uppercase tracking-widest" id="pdfReportTitle">PARCEL DELIVERY RECONCILIATION REPORT</p>
+                </div>
+                <div class="text-right text-xs font-mono">
+                    <p><span class="font-bold text-slate-700">Batch ID:</span> <span id="pdfBatchId">DEL-001</span></p>
+                    <p><span class="font-bold text-slate-700">Date:</span> <span id="pdfDate">2026-11-03</span></p>
+                    <p><span class="font-bold text-slate-700">Time:</span> <span id="pdfTime">16:30</span></p>
+                </div>
+            </div>
+
+            <!-- EXECUTIVE SUMMARY BOX -->
+            <div class="bg-slate-100 rounded-xl p-4 mb-6 border border-slate-300">
+                <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Batch Reconciliation Summary</h2>
+                <div id="pdfSummaryCounters" class="grid grid-cols-3 gap-4 text-center">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- HIERARCHICAL PLATFORM & COURIER BREAKDOWN (Section 8) -->
+            <div class="mb-6">
+                <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 pb-1 border-b border-slate-300">Distribution Summary (Platform → Courier)</h2>
+                <div id="pdfHierarchicalBreakdown" class="grid grid-cols-2 gap-4">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- DETAILED AWB LIST TABLE -->
+            <div>
+                <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 pb-1 border-b border-slate-300">Detailed Scanned Manifest</h2>
+                <table class="w-full text-left text-xs font-mono border-collapse">
+                    <thead>
+                        <tr class="bg-slate-800 text-white uppercase text-[10px]">
+                            <th class="p-2 border border-slate-700">#</th>
+                            <th class="p-2 border border-slate-700">AWB / Tracking ID</th>
+                            <th class="p-2 border border-slate-700">Platform</th>
+                            <th class="p-2 border border-slate-700">Courier Partner</th>
+                            <th class="p-2 border border-slate-700">Status</th>
+                            <th class="p-2 border border-slate-700 text-right">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pdfTableBody" class="divide-y divide-slate-300">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- FOOTER & SIGN-OFF -->
+            <div class="mt-12 pt-6 border-t border-slate-300 flex justify-between items-end text-xs text-slate-500 font-sans">
+                <div>
+                    <p>Generated automatically by ARKO Parcel Scanning System.</p>
+                    <p class="text-[10px]">Verify all manifest counts prior to departure.</p>
+                </div>
+                <div class="text-center">
+                    <div class="w-40 border-b border-slate-400 mb-1"></div>
+                    <p class="font-bold text-slate-700">Supervisor Sign-off</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CORE SYSTEM SCRIPT LOGIC -->
+    <script>
+        /**
+         * DEFAULT CONFIGURABLE PREFIX RULES (Section 5, 6 & 32)
+         */
+        const DEFAULT_RULES = [
+            { prefix: '1490', platform: 'Meesho', courier: 'Delivery' },
+            { prefix: '5931', platform: 'Flipkart', courier: 'Delivery' },
+            { prefix: 'ASF',  platform: 'Meesho', courier: 'Satofex' },
+            { prefix: 'FMPC', platform: 'Flipkart', courier: 'E-CART' },
+            { prefix: 'FMPP', platform: 'Flipkart', courier: 'E-CART' },
+            { prefix: 'FMPR', platform: 'Flipkart', courier: 'E-CART' }
+        ];
+
+        // GLOBAL APPLICATION STATE
+        let activeRules = [];
+        let currentWorkflow = 'delivery'; // 'delivery' | 'undelivered' | 'rto'
+
+        // BATCH DATA STORES
+        let currentBatch = {
+            id: '',
+            createdAt: '',
+            deliveryScans: [],    // Array of { awb, platform, courier, status: 'DELIVERY', timestamp }
+            undeliveredScans: [], // Array of { awb, platform, courier, status: 'UNDELIVERED', timestamp }
+            rtoScans: []          // Array of { awb, platform, courier, status: 'RTO', timestamp }
+        };
+
+        // AUDIO SYNTHESIZER FOR WAREHOUSE SCANNER BEEPS
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playTone(freq, type, duration) {
+            try {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {
+                console.log('Audio playback prevented');
+            }
+        }
+
+        function playScanBeep(status) {
+            if (status === 'SUCCESS') {
+                playTone(1200, 'sine', 0.08);
+            } else if (status === 'DUPLICATE' || status === 'ALREADY_UNDELIVERED') {
+                playTone(400, 'square', 0.15);
+            } else if (status === 'ERROR' || status === 'UNKNOWN') {
+                playTone(200, 'sawtooth', 0.25);
+            }
+        }
+
+        // INITIALIZATION ON WINDOW LOAD
+        window.onload = function() {
+            loadRules();
+            initOrRestoreBatch();
+            setupFocusKeepAlive();
+            startClock();
+            renderRulesTable();
+            updateUI();
+        };
+
+        // CLOCK
+        function startClock() {
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('sessionTimestamp').innerText = now.toLocaleTimeString();
+            }, 1000);
+        }
+
+        // ALWAYS KEEP BARCODE INPUT FOCUSED
+        function setupFocusKeepAlive() {
+            const input = document.getElementById('barcodeInput');
+            // Re-focus when clicking anywhere non-interactive
+            document.addEventListener('click', (e) => {
+                const modal = document.getElementById('rulesModal');
+                if (modal.classList.contains('hidden') && 
+                    !['BUTTON', 'INPUT', 'SELECT', 'A', 'TABLE', 'TH', 'TD'].includes(e.target.tagName)) {
+                    input.focus();
+                }
+            });
+        }
+
+        // LOCAL STORAGE / RULES MANAGEMENT
+        function loadRules() {
+            const stored = localStorage.getItem('arko_awb_rules');
+            if (stored) {
+                try {
+                    activeRules = JSON.parse(stored);
+                } catch(e) {
+                    activeRules = [...DEFAULT_RULES];
+                }
+            } else {
+                activeRules = [...DEFAULT_RULES];
+            }
+        }
+
+        function saveRules() {
+            localStorage.setItem('arko_awb_rules', JSON.stringify(activeRules));
+            renderRulesTable();
+            updateUI();
+        }
+
+        function resetRulesToDefault() {
+            activeRules = [...DEFAULT_RULES];
+            saveRules();
+        }
+
+        function addNewRule() {
+            const pInput = document.getElementById('newRulePrefix');
+            const platInput = document.getElementById('newRulePlatform');
+            const cInput = document.getElementById('newRuleCourier');
+
+            const prefix = pInput.value.trim().toUpperCase();
+            const platform = platInput.value.trim();
+            const courier = cInput.value.trim();
+
+            if (!prefix || !platform || !courier) {
+                showScanFeedback('ERROR', 'ALL FIELDS REQUIRED', 'Please fill prefix, platform, and courier name.');
+                return;
+            }
+
+            // Remove existing duplicate prefix if any
+            activeRules = activeRules.filter(r => r.prefix !== prefix);
+            activeRules.unshift({ prefix, platform, courier });
+            saveRules();
+
+            pInput.value = '';
+            platInput.value = '';
+            cInput.value = '';
+            showScanFeedback('SUCCESS', 'RULE SAVED', `Prefix ${prefix} mapped to ${platform} / ${courier}`);
+        }
+
+        function deleteRule(prefix) {
+            activeRules = activeRules.filter(r => r.prefix !== prefix);
+            saveRules();
+        }
+
+        function renderRulesTable() {
+            const tbody = document.getElementById('rulesTableBody');
+            tbody.innerHTML = activeRules.map(r => `
+                <tr class="hover:bg-slate-800/50">
+                    <td class="p-3 font-bold text-blue-400">${r.prefix}</td>
+                    <td class="p-3">${r.platform}</td>
+                    <td class="p-3 text-emerald-400">${r.courier}</td>
+                    <td class="p-3 text-right">
+                        <button onclick="deleteRule('${r.prefix}')" class="text-rose-400 hover:text-rose-300 p-1">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // AWB CLASSIFICATION ENGINE (Section 5)
+        function classifyAWB(awb) {
+            const cleaned = awb.trim().toUpperCase();
+            // Sort rules by prefix length descending to match longest prefix first
+            const sortedRules = [...activeRules].sort((a, b) => b.prefix.length - a.prefix.length);
+
+            for (let rule of sortedRules) {
+                if (cleaned.startsWith(rule.prefix)) {
+                    return {
+                        platform: rule.platform,
+                        courier: rule.courier,
+                        matchedPrefix: rule.prefix,
+                        isUnknown: false
+                    };
+                }
+            }
+            return {
+                platform: 'UNKNOWN',
+                courier: 'UNMAPPED',
+                matchedPrefix: null,
+                isUnknown: true
+            };
+        }
+
+        // BATCH LIFECYCLE MANAGEMENT
+        function initOrRestoreBatch() {
+            const savedBatch = localStorage.getItem('arko_active_batch');
+            if (savedBatch) {
+                try {
+                    currentBatch = JSON.parse(savedBatch);
+                } catch(e) {
+                    createNewBatch();
+                }
+            } else {
+                createNewBatch();
+            }
+            document.getElementById('currentBatchId').innerText = currentBatch.id;
+        }
+
+        function createNewBatch() {
+            const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+            const rand = Math.floor(100 + Math.random() * 900);
+            currentBatch = {
+                id: `DEL-${dateStr}-${rand}`,
+                createdAt: new Date().toISOString(),
+                deliveryScans: [],
+                undeliveredScans: [],
+                rtoScans: []
+            };
+            persistBatch();
+            updateUI();
+        }
+
+        function confirmNewBatch() {
+            if (currentBatch.deliveryScans.length > 0 || currentBatch.rtoScans.length > 0) {
+                if (window.confirm("Start a new batch? The current batch data will be archived and cleared.")) {
+                    createNewBatch();
+                    showScanFeedback('SUCCESS', 'NEW BATCH STARTED', 'Ready for new operations.');
+                }
+            } else {
+                createNewBatch();
+            }
+        }
+
+        function persistBatch() {
+            localStorage.setItem('arko_active_batch', JSON.stringify(currentBatch));
+        }
+
+        // WORKFLOW SWITCHING (Section 2)
+        function switchWorkflow(workflow) {
+            currentWorkflow = workflow;
+
+            const tDel = document.getElementById('tab-delivery');
+            const tUnd = document.getElementById('tab-undelivered');
+            const tRto = document.getElementById('tab-rto');
+            const card = document.getElementById('scanCard');
+            const label = document.getElementById('scannerLabel');
+            const badge = document.getElementById('reconcileModuleBadge');
+
+            // Reset tab styles
+            [tDel, tUnd, tRto].forEach(b => {
+                b.className = "py-3 px-4 rounded-lg font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 text-sm sm:text-base flex items-center justify-center gap-2 transition-all duration-200";
+            });
+
+            if (workflow === 'delivery') {
+                tDel.className = "py-3 px-4 rounded-lg font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all duration-200 bg-blue-600 text-white shadow-lg";
+                card.className = "bg-slate-900 border-2 border-blue-500/50 rounded-2xl p-4 sm:p-6 shadow-2xl relative transition-all duration-300";
+                label.innerHTML = '<i class="fa-solid fa-barcode text-base"></i> READY TO SCAN DELIVERY PARCELS';
+                label.className = "text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-2";
+                badge.className = "text-[10px] bg-blue-900/60 text-blue-300 border border-blue-700/50 px-2 py-0.5 rounded font-mono uppercase";
+                badge.innerText = "Delivery Mode";
+            } else if (workflow === 'undelivered') {
+                tUnd.className = "py-3 px-4 rounded-lg font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all duration-200 bg-rose-600 text-white shadow-lg";
+                card.className = "bg-slate-900 border-2 border-rose-500/50 rounded-2xl p-4 sm:p-6 shadow-2xl relative transition-all duration-300";
+                label.innerHTML = '<i class="fa-solid fa-ban text-base"></i> READY TO SCAN UNDELIVERED / FAILED PARCELS';
+                label.className = "text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-2";
+                badge.className = "text-[10px] bg-rose-900/60 text-rose-300 border border-rose-700/50 px-2 py-0.5 rounded font-mono uppercase";
+                badge.innerText = "Undelivered Mode";
+            } else if (workflow === 'rto') {
+                tRto.className = "py-3 px-4 rounded-lg font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all duration-200 bg-amber-600 text-white shadow-lg";
+                card.className = "bg-slate-900 border-2 border-amber-500/50 rounded-2xl p-4 sm:p-6 shadow-2xl relative transition-all duration-300";
+                label.innerHTML = '<i class="fa-solid fa-arrows-rotate text-base"></i> READY TO SCAN RTO / RETURN PARCELS';
+                label.className = "text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2";
+                badge.className = "text-[10px] bg-amber-900/60 text-amber-300 border border-amber-700/50 px-2 py-0.5 rounded font-mono uppercase";
+                badge.innerText = "RTO Mode";
+            }
+
+            document.getElementById('barcodeInput').focus();
+            updateUI();
+        }
+
+        // BARCODE SCAN PROCESSOR (Core Logic for Rules 3, 10, 14, 17, 20, 21)
+        function handleScanKeydown(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                processManualScan();
+            }
+        }
+
+        function processManualScan() {
+            const input = document.getElementById('barcodeInput');
+            const awb = input.value.trim().toUpperCase();
+
+            if (!awb) return;
+
+            // Clear input for next scan immediately
+            input.value = '';
+
+            const classification = classifyAWB(awb);
+            const timeNow = new Date().toLocaleTimeString();
+
+            if (currentWorkflow === 'delivery') {
+                handleDeliveryScan(awb, classification, timeNow);
+            } else if (currentWorkflow === 'undelivered') {
+                handleUndeliveredScan(awb, classification, timeNow);
+            } else if (currentWorkflow === 'rto') {
+                handleRtoScan(awb, classification, timeNow);
+            }
+
+            persistBatch();
+            updateUI();
+        }
+
+        // 1. DELIVERY SCAN HANDLER
+        function handleDeliveryScan(awb, classification, timestamp) {
+            // Check Duplicate (Section 10)
+            const exists = currentBatch.deliveryScans.some(item => item.awb === awb);
+            if (exists) {
+                showScanFeedback('DUPLICATE', 'DUPLICATE — AWB ALREADY SCANNED', `AWB ${awb} is already in the current delivery batch.`);
+                playScanBeep('DUPLICATE');
+                triggerFlash('warning');
+                return;
+            }
+
+            // Unknown warning
+            if (classification.isUnknown) {
+                showScanFeedback('UNKNOWN', 'UNKNOWN / UNMAPPED AWB', `AWB ${awb} prefix not mapped to any courier.`);
+                playScanBeep('UNKNOWN');
+                triggerFlash('danger');
+            } else {
+                showScanFeedback('SUCCESS', 'SUCCESS — AWB ADDED TO DELIVERY', `${classification.platform} • ${classification.courier} (${awb})`);
+                playScanBeep('SUCCESS');
+                triggerFlash('success');
+            }
+
+            currentBatch.deliveryScans.unshift({
+                awb,
+                platform: classification.platform,
+                courier: classification.courier,
+                status: 'DELIVERY',
+                timestamp
+            });
+        }
+
+        // 2. UNDELIVERED RECONCILIATION SCAN HANDLER (Section 14)
+        function handleUndeliveredScan(awb, classification, timestamp) {
+            // Check if AWB exists in delivery batch
+            const deliveryItem = currentBatch.deliveryScans.find(item => item.awb === awb);
+
+            if (!deliveryItem) {
+                showScanFeedback('ERROR', 'ERROR — AWB NOT FOUND IN DELIVERY BATCH', `AWB ${awb} was not included in initial delivery scans.`);
+                playScanBeep('ERROR');
+                triggerFlash('danger');
+                return;
+            }
+
+            // Check if already marked undelivered
+            const alreadyUndelivered = currentBatch.undeliveredScans.some(item => item.awb === awb);
+            if (alreadyUndelivered) {
+                showScanFeedback('DUPLICATE', 'ALREADY MARKED UNDELIVERED', `AWB ${awb} has already been deducted.`);
+                playScanBeep('ALREADY_UNDELIVERED');
+                triggerFlash('warning');
+                return;
+            }
+
+            // Valid undelivered scan
+            currentBatch.undeliveredScans.unshift({
+                awb,
+                platform: deliveryItem.platform,
+                courier: deliveryItem.courier,
+                status: 'UNDELIVERED',
+                timestamp
+            });
+
+            showScanFeedback('SUCCESS', 'SUCCESS — MARKED AS UNDELIVERED', `Deducted 1 parcel from final delivery count. (${awb})`);
+            playScanBeep('SUCCESS');
+            triggerFlash('success');
+        }
+
+        // 3. RTO / RETURN SCAN HANDLER (Section 17 & 20)
+        function handleRtoScan(awb, classification, timestamp) {
+            // Duplicate Check in RTO session
+            const exists = currentBatch.rtoScans.some(item => item.awb === awb);
+            if (exists) {
+                showScanFeedback('DUPLICATE', 'DUPLICATE — RTO AWB ALREADY SCANNED', `RTO parcel ${awb} already scanned in this RTO batch.`);
+                playScanBeep('DUPLICATE');
+                triggerFlash('warning');
+                return;
+            }
+
+            if (classification.isUnknown) {
+                showScanFeedback('UNKNOWN', 'UNKNOWN / UNMAPPED RTO AWB', `AWB ${awb} has unmapped prefix.`);
+                playScanBeep('UNKNOWN');
+                triggerFlash('danger');
+            } else {
+                showScanFeedback('SUCCESS', 'SUCCESS — RTO RECORDED', `${classification.platform} • ${classification.courier} (${awb})`);
+                playScanBeep('SUCCESS');
+                triggerFlash('success');
+            }
+
+            currentBatch.rtoScans.unshift({
+                awb,
+                platform: classification.platform,
+                courier: classification.courier,
+                status: 'RTO',
+                timestamp
+            });
+        }
+
+        // UI SCAN FEEDBACK BANNER UPDATER
+        function showScanFeedback(type, title, message) {
+            const feedback = document.getElementById('scanFeedback');
+            const icon = document.getElementById('feedbackIcon');
+            const titleEl = document.getElementById('feedbackTitle');
+            const subEl = document.getElementById('feedbackSub');
+            const tag = document.getElementById('feedbackTag');
+
+            tag.classList.remove('hidden');
+
+            if (type === 'SUCCESS') {
+                feedback.className = "mt-3 p-3 rounded-xl border flex items-center justify-between bg-emerald-950/60 border-emerald-600/60 text-emerald-300 text-sm font-medium transition-all duration-200";
+                icon.className = "w-8 h-8 rounded-full bg-emerald-800/80 flex items-center justify-center text-emerald-200";
+                icon.innerHTML = '<i class="fa-solid fa-check"></i>';
+                tag.className = "px-2.5 py-1 rounded bg-emerald-900 border border-emerald-700 text-emerald-200 text-xs font-mono font-bold uppercase";
+                tag.innerText = "MATCHED";
+            } else if (type === 'DUPLICATE') {
+                feedback.className = "mt-3 p-3 rounded-xl border flex items-center justify-between bg-amber-950/60 border-amber-600/60 text-amber-300 text-sm font-medium transition-all duration-200";
+                icon.className = "w-8 h-8 rounded-full bg-amber-800/80 flex items-center justify-center text-amber-200";
+                icon.innerHTML = '<i class="fa-solid fa-copy"></i>';
+                tag.className = "px-2.5 py-1 rounded bg-amber-900 border border-amber-700 text-amber-200 text-xs font-mono font-bold uppercase";
+                tag.innerText = "DUPLICATE";
+            } else if (type === 'UNKNOWN') {
+                feedback.className = "mt-3 p-3 rounded-xl border flex items-center justify-between bg-purple-950/60 border-purple-600/60 text-purple-300 text-sm font-medium transition-all duration-200";
+                icon.className = "w-8 h-8 rounded-full bg-purple-800/80 flex items-center justify-center text-purple-200";
+                icon.innerHTML = '<i class="fa-solid fa-question"></i>';
+                tag.className = "px-2.5 py-1 rounded bg-purple-900 border border-purple-700 text-purple-200 text-xs font-mono font-bold uppercase";
+                tag.innerText = "UNMAPPED";
+            } else if (type === 'ERROR') {
+                feedback.className = "mt-3 p-3 rounded-xl border flex items-center justify-between bg-rose-950/60 border-rose-600/60 text-rose-300 text-sm font-medium transition-all duration-200";
+                icon.className = "w-8 h-8 rounded-full bg-rose-800/80 flex items-center justify-center text-rose-200";
+                icon.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                tag.className = "px-2.5 py-1 rounded bg-rose-900 border border-rose-700 text-rose-200 text-xs font-mono font-bold uppercase";
+                tag.innerText = "REJECTED";
+            }
+
+            titleEl.innerText = title;
+            subEl.innerText = message;
+        }
+
+        function triggerFlash(colorClass) {
+            const card = document.getElementById('scanCard');
+            card.classList.remove('flash-success', 'flash-warning', 'flash-danger');
+            void card.offsetWidth; // Force DOM Reflow
+            card.classList.add(`flash-${colorClass}`);
+        }
+
+        // UPDATE ENTIRE DASHBOARD (RECONCILIATION CALCULATIONS - Section 30)
+        function updateUI() {
+            const initialCount = currentBatch.deliveryScans.length;
+            const undeliveredCount = currentBatch.undeliveredScans.length;
+            // Formula: Final Delivery Count = Initial Delivery Count - Undelivered Count
+            const finalCount = Math.max(0, initialCount - undeliveredCount);
+            const rtoCount = currentBatch.rtoScans.length;
+
+            // Badges
+            document.getElementById('badge-delivery-count').innerText = initialCount;
+            document.getElementById('badge-undelivered-count').innerText = undeliveredCount;
+            document.getElementById('badge-rto-count').innerText = rtoCount;
+
+            // Stats Dashboard Cards
+            document.getElementById('statInitialCount').innerText = initialCount;
+            document.getElementById('statUndeliveredCount').innerText = undeliveredCount;
+            document.getElementById('statFinalCount').innerText = finalCount;
+            document.getElementById('statRtoCount').innerText = rtoCount;
+
+            renderScanLogs();
+            renderBreakdowns();
+        }
+
+        // RENDER LOGS TABLE
+        function renderScanLogs() {
+            const tbody = document.getElementById('scanLogTbody');
+            const filter = document.getElementById('logFilter').value;
+
+            let sourceLogs = [];
+            if (currentWorkflow === 'delivery') sourceLogs = currentBatch.deliveryScans;
+            else if (currentWorkflow === 'undelivered') sourceLogs = currentBatch.undeliveredScans;
+            else if (currentWorkflow === 'rto') sourceLogs = currentBatch.rtoScans;
+
+            document.getElementById('scanLogCount').innerText = sourceLogs.length;
+
+            let filtered = sourceLogs;
+            if (filter !== 'ALL') {
+                if (filter === 'UNKNOWN') filtered = sourceLogs.filter(i => i.platform === 'UNKNOWN');
+                else filtered = sourceLogs.filter(i => i.platform === filter);
+            }
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="py-10 text-center text-slate-500 font-sans">
+                            No matching items in ${currentWorkflow.toUpperCase()} scan log.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map((item, index) => {
+                const totalItems = filtered.length;
+                const seq = totalItems - index;
+                
+                let statusBadge = '';
+                if (item.status === 'DELIVERY') statusBadge = '<span class="px-2 py-0.5 bg-blue-900/60 text-blue-300 border border-blue-800 rounded-full text-[10px]">DELIVERY</span>';
+                else if (item.status === 'UNDELIVERED') statusBadge = '<span class="px-2 py-0.5 bg-rose-900/60 text-rose-300 border border-rose-800 rounded-full text-[10px]">UNDELIVERED</span>';
+                else if (item.status === 'RTO') statusBadge = '<span class="px-2 py-0.5 bg-amber-900/60 text-amber-300 border border-amber-800 rounded-full text-[10px]">RTO</span>';
+
+                const platformStyle = item.platform === 'Meesho' ? 'text-pink-400 font-bold' : item.platform === 'Flipkart' ? 'text-yellow-400 font-bold' : 'text-slate-400';
+
+                return `
+                    <tr class="hover:bg-slate-800/40 transition">
+                        <td class="py-2.5 px-3 text-slate-500">${seq}</td>
+                        <td class="py-2.5 px-3 font-bold text-white tracking-wide">${item.awb}</td>
+                        <td class="py-2.5 px-3 ${platformStyle}">${item.platform}</td>
+                        <td class="py-2.5 px-3 text-emerald-400 font-semibold">${item.courier}</td>
+                        <td class="py-2.5 px-3 text-center">${statusBadge}</td>
+                        <td class="py-2.5 px-3 text-right text-slate-400 text-[11px]">${item.timestamp}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // RENDER PLATFORM & COURIER BREAKDOWN PANELS
+        function renderBreakdowns() {
+            let activeDataset = [];
+            if (currentWorkflow === 'rto') {
+                activeDataset = currentBatch.rtoScans;
+            } else {
+                // For delivery mode, only include final active delivered parcels (Initial minus Undelivered)
+                const undeliveredSet = new Set(currentBatch.undeliveredScans.map(u => u.awb));
+                activeDataset = currentBatch.deliveryScans.filter(d => !undeliveredSet.has(d.awb));
+            }
+
+            const platformMap = {};
+            const courierMap = {};
+            let unknownCount = 0;
+
+            activeDataset.forEach(item => {
+                if (item.platform === 'UNKNOWN') unknownCount++;
+                platformMap[item.platform] = (platformMap[item.platform] || 0) + 1;
+                courierMap[item.courier] = (courierMap[item.courier] || 0) + 1;
+            });
+
+            // Render Platform
+            const platContainer = document.getElementById('platformBreakdown');
+            const platKeys = Object.keys(platformMap);
+            if (platKeys.length === 0) {
+                platContainer.innerHTML = `<div class="text-xs text-slate-500 italic py-1">No scanned parcels.</div>`;
+            } else {
+                platContainer.innerHTML = platKeys.map(key => `
+                    <div class="flex items-center justify-between text-xs bg-slate-950 p-2 rounded-lg border border-slate-800">
+                        <span class="font-bold text-slate-300 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full ${key === 'Meesho' ? 'bg-pink-500' : key === 'Flipkart' ? 'bg-yellow-400' : 'bg-slate-500'}"></span>
+                            ${key}
+                        </span>
+                        <span class="font-mono font-bold text-blue-400">${platformMap[key]} parcels</span>
+                    </div>
+                `).join('');
+            }
+
+            // Render Courier
+            const courierContainer = document.getElementById('courierBreakdown');
+            const courierKeys = Object.keys(courierMap);
+            if (courierKeys.length === 0) {
+                courierContainer.innerHTML = `<div class="text-xs text-slate-500 italic py-1">No scanned parcels.</div>`;
+            } else {
+                courierContainer.innerHTML = courierKeys.map(key => `
+                    <div class="flex items-center justify-between text-xs bg-slate-950 p-2 rounded-lg border border-slate-800">
+                        <span class="font-bold text-emerald-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-truck-fast text-[10px]"></i> ${key}
+                        </span>
+                        <span class="font-mono font-bold text-emerald-300">${courierMap[key]} parcels</span>
+                    </div>
+                `).join('');
+            }
+
+            // Unknown warning
+            const warnBox = document.getElementById('unknownWarningBox');
+            if (unknownCount > 0) {
+                warnBox.classList.remove('hidden');
+                document.getElementById('unknownCount').innerText = unknownCount;
+            } else {
+                warnBox.classList.add('hidden');
+            }
+        }
+
+        // RULES MODAL CONTROLS
+        function openRulesModal() {
+            renderRulesTable();
+            document.getElementById('rulesModal').classList.remove('hidden');
+        }
+
+        function closeRulesModal() {
+            document.getElementById('rulesModal').classList.add('hidden');
+            document.getElementById('barcodeInput').focus();
+        }
+
+        // GENERATE PDF REPORT (Section 8, 15, 16, 18, 19)
+        function generateCurrentPDF() {
+            const isRTO = currentWorkflow === 'rto';
+            const dateStr = new Date().toLocaleDateString();
+            const timeStr = new Date().toLocaleTimeString();
+
+            document.getElementById('pdfBatchId').innerText = currentBatch.id;
+            document.getElementById('pdfDate').innerText = dateStr;
+            document.getElementById('pdfTime').innerText = timeStr;
+
+            const summaryBox = document.getElementById('pdfSummaryCounters');
+            const breakdownBox = document.getElementById('pdfHierarchicalBreakdown');
+            const tbody = document.getElementById('pdfTableBody');
+            const reportTitle = document.getElementById('pdfReportTitle');
+
+            if (isRTO) {
+                reportTitle.innerText = "RTO / RETURN RECEIPT MANIFEST REPORT";
+
+                // Summary Numbers
+                summaryBox.innerHTML = `
+                    <div class="p-2 border border-slate-300 rounded bg-white">
+                        <p class="text-[10px] text-slate-500 uppercase font-bold">Total RTO Received</p>
+                        <p class="text-2xl font-black text-amber-600 font-mono">${currentBatch.rtoScans.length}</p>
+                    </div>
+                    <div class="p-2 border border-slate-300 rounded bg-white">
+                        <p class="text-[10px] text-slate-500 uppercase font-bold">Marketplaces</p>
+                        <p class="text-sm font-bold text-slate-800 mt-1">${getUniquePlatforms(currentBatch.rtoScans)}</p>
+                    </div>
+                    <div class="p-2 border border-slate-300 rounded bg-white">
+                        <p class="text-[10px] text-slate-500 uppercase font-bold">Courier Partners</p>
+                        <p class="text-sm font-bold text-slate-800 mt-1">${getUniqueCouriers(currentBatch.rtoScans)}</p>
+                    </div>
+                `;
+
+                // Hierarchical PDF Breakdown (Platform -> Courier)
+                breakdownBox.innerHTML = generateHierarchicalPdfHtml(currentBatch.rtoScans);
+
+                // Table Rows
+                tbody.innerHTML = generateTableRowsHtml(currentBatch.rtoScans);
+
+            } else {
+                // DELIVERY RECONCILIATION PDF
+                reportTitle.innerText = "DAILY DELIVERY & RECONCILIATION MANIFEST REPORT";
+
+                const initialCount = currentBatch.deliveryScans.length;
+                const undeliveredCount = currentBatch.undeliveredScans.length;
+                const finalCount = Math.max(0, initialCount - undeliveredCount);
+
+                const undeliveredSet = new Set(currentBatch.undeliveredScans.map(u => u.awb));
+                const finalDeliveredList = currentBatch.deliveryScans.filter(d => !undeliveredSet.has(d.awb));
+
+                summaryBox.innerHTML = `
+                    <div class="p-2 border border-slate-300 rounded bg-white">
+                        <p class="text-[10px] text-slate-500 uppercase font-bold">Initial Scanned</p>
+                        <p class="text-xl font-bold text-slate-800 font-mono">${initialCount}</p>
+                    </div>
+                    <div class="p-2 border border-slate-300 rounded bg-white">
+                        <p class="text-[10px] text-slate-500 uppercase font-bold">Undelivered Scanned</p>
+                        <p class="text-xl font-bold text-rose-600 font-mono">${undeliveredCount}</p>
+                    </div>
+                    <div class="p-2 border border-slate-300 rounded bg-white">
+                        <p class="text-[10px] text-slate-500 uppercase font-bold">Final Delivered Total</p>
+                        <p class="text-2xl font-black text-emerald-600 font-mono">${finalCount}</p>
+                    </div>
+                `;
+
+                // Hierarchical PDF Breakdown sorted Platform -> Courier for Delivery person
+                breakdownBox.innerHTML = generateHierarchicalPdfHtml(finalDeliveredList);
+
+                // Combined manifest list in PDF with Status
+                const allManifest = [
+                    ...finalDeliveredList.map(i => ({...i, pdfStatus: 'DELIVERED'})),
+                    ...currentBatch.undeliveredScans.map(i => ({...i, pdfStatus: 'UNDELIVERED'}))
+                ];
+
+                tbody.innerHTML = generateTableRowsHtml(allManifest);
+            }
+
+            // TRIGGER HTML2PDF DOWNLOAD
+            const element = document.getElementById('pdfContainer');
+            element.parentElement.classList.remove('hidden');
+
+            const opt = {
+                margin:       0.3,
+                filename:     `ARKO_${isRTO ? 'RTO' : 'DELIVERY'}_${currentBatch.id}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2 },
+                jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(element).save().then(() => {
+                element.parentElement.classList.add('hidden');
+            });
+        }
+
+        // PDF HIERARCHICAL PLATFORM → COURIER AGGREGATOR (Section 8)
+        function generateHierarchicalPdfHtml(scanItems) {
+            if (scanItems.length === 0) {
+                return `<div class="col-span-2 text-xs text-slate-500 italic p-2 border">No parcel record available for summary.</div>`;
+            }
+
+            // Group: Platform -> Courier -> Count
+            const hierarchy = {};
+
+            scanItems.forEach(item => {
+                const p = item.platform;
+                const c = item.courier;
+                if (!hierarchy[p]) hierarchy[p] = {};
+                hierarchy[p][c] = (hierarchy[p][c] || 0) + 1;
+            });
+
+            let html = '';
+            let grandTotal = scanItems.length;
+
+            Object.keys(hierarchy).forEach(platform => {
+                let platformTotal = 0;
+                let courierRows = '';
+
+                Object.keys(hierarchy[platform]).forEach(courier => {
+                    const count = hierarchy[platform][courier];
+                    platformTotal += count;
+                    courierRows += `
+                        <div class="flex justify-between text-xs py-0.5 px-2 bg-slate-50 border-b border-slate-200">
+                            <span class="text-slate-700">${courier}:</span>
+                            <span class="font-mono font-bold text-slate-900">${count}</span>
+                        </div>
+                    `;
+                });
+
+                html += `
+                    <div class="border border-slate-400 rounded overflow-hidden">
+                        <div class="bg-slate-200 px-3 py-1.5 flex justify-between items-center border-b border-slate-300">
+                            <span class="font-bold text-xs text-slate-800 uppercase tracking-wide">${platform}</span>
+                            <span class="font-mono font-bold text-xs bg-slate-800 text-white px-2 py-0.5 rounded">${platformTotal}</span>
+                        </div>
+                        <div class="p-1 bg-white">
+                            ${courierRows}
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                <div class="col-span-2 bg-slate-900 text-white p-2.5 rounded flex justify-between items-center mt-1">
+                    <span class="font-bold text-xs uppercase tracking-wider">Grand Net Total Parcels:</span>
+                    <span class="font-mono text-lg font-black text-emerald-400">${grandTotal}</span>
+                </div>
+            `;
+
+            return html;
+        }
+
+        // PDF MANIFEST TABLE ROW GENERATOR
+        function generateTableRowsHtml(items) {
+            if (items.length === 0) {
+                return `<tr><td colspan="6" class="p-4 text-center text-slate-500">No records found.</td></tr>`;
+            }
+
+            // Sort by Platform -> Courier -> AWB for ultra-clean driver readability
+            const sorted = [...items].sort((a, b) => {
+                if (a.platform !== b.platform) return a.platform.localeCompare(b.platform);
+                if (a.courier !== b.courier) return a.courier.localeCompare(b.courier);
+                return a.awb.localeCompare(b.awb);
+            });
+
+            return sorted.map((item, index) => `
+                <tr class="even:bg-slate-50">
+                    <td class="p-1.5 border border-slate-300 font-mono">${index + 1}</td>
+                    <td class="p-1.5 border border-slate-300 font-mono font-bold">${item.awb}</td>
+                    <td class="p-1.5 border border-slate-300">${item.platform}</td>
+                    <td class="p-1.5 border border-slate-300 font-semibold text-slate-800">${item.courier}</td>
+                    <td class="p-1.5 border border-slate-300 text-center">
+                        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            item.pdfStatus === 'UNDELIVERED' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                        }">
+                            ${item.pdfStatus || item.status}
+                        </span>
+                    </td>
+                    <td class="p-1.5 border border-slate-300 text-right font-mono text-[10px] text-slate-500">${item.timestamp}</td>
+                </tr>
+            `).join('');
+        }
+
+        function getUniquePlatforms(scans) {
+            const set = new Set(scans.map(s => s.platform));
+            return Array.from(set).join(', ') || 'None';
+        }
+
+        function getUniqueCouriers(scans) {
+            const set = new Set(scans.map(s => s.courier));
+            return Array.from(set).join(', ') || 'None';
+        }
+    </script>
+</body>
+</html>

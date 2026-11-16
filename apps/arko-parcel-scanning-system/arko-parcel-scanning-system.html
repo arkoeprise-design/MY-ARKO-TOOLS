@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARKO - Parcel Scanning & Delivery Reconciliation System</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- jsPDF & AutoTable for PDF Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+    
+    <!-- Custom styling & Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ankoNavy: '#0F172A',
+                        ankoBlue: '#2563EB',
+                        ankoAccent: '#0284C7',
+                        ankoDark: '#1E293B'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8FAFC;
+        }
+        .scan-flash-success {
+            animation: flashGreen 0.4s ease-out;
+        }
+        .scan-flash-duplicate {
+            animation: flashYellow 0.4s ease-out;
+        }
+        .scan-flash-error {
+            animation: flashRed 0.4s ease-out;
+        }
+        @keyframes flashGreen {
+            0% { background-color: rgba(34, 197, 94, 0.25); }
+            100% { background-color: transparent; }
+        }
+        @keyframes flashYellow {
+            0% { background-color: rgba(234, 179, 8, 0.3); }
+            100% { background-color: transparent; }
+        }
+        @keyframes flashRed {
+            0% { background-color: rgba(239, 68, 68, 0.3); }
+            100% { background-color: transparent; }
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #F1F5F9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94A3B8;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col justify-between selection:bg-blue-500 selection:text-white">
+
+    <!-- TOP HEADER / BRANDING BAR -->
+    <header class="bg-ankoNavy text-white border-b border-slate-800 shadow-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-ankoBlue text-white p-2.5 rounded-xl shadow-lg flex items-center justify-center font-black tracking-wider">
+                    <i class="fa-solid fa-boxes-packing text-xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl font-black tracking-wider text-white">ARKO</span>
+                        <span class="bg-blue-500/20 text-blue-300 text-xs px-2 py-0.5 rounded-full font-semibold border border-blue-400/30">RECON v2.5</span>
+                    </div>
+                    <p class="text-xs text-slate-400 hidden sm:block">Parcel Scanning & Delivery Reconciliation System</p>
+                </div>
+            </div>
+
+            <!-- Header Controls & Tools -->
+            <div class="flex items-center gap-2 sm:gap-3">
+                <button id="audioToggleBtn" onclick="toggleAudio()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-2 border border-slate-700 transition" title="Toggle Scan Audio Feedback">
+                    <i id="audioIcon" class="fa-solid fa-volume-high text-emerald-400"></i>
+                    <span class="hidden md:inline">Sound On</span>
+                </button>
+
+                <button onclick="openConfigModal()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium flex items-center gap-2 border border-slate-700 transition" title="Configure AWB Prefix Rules">
+                    <i class="fa-solid fa-sliders text-blue-400"></i>
+                    <span class="hidden md:inline">Prefix Rules</span>
+                </button>
+
+                <button onclick="triggerResetConfirmation()" class="px-3.5 py-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-600 text-white text-xs font-semibold flex items-center gap-2 transition shadow-sm" title="Clear current session">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>RESET</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN APP CONTAINER -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full">
+        
+        <!-- WORKFLOW NAVIGATION & GENERATE REPORT BUTTONS -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-6">
+            <!-- Mode Switchers (8 Cols) -->
+            <div class="lg:col-span-8 bg-white p-2 rounded-2xl shadow-sm border border-slate-200/80 flex flex-wrap sm:flex-nowrap gap-2">
+                <button id="tab-delivery" onclick="switchWorkflow('delivery')" class="flex-1 py-3 px-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all shadow-sm bg-ankoBlue text-white">
+                    <i class="fa-solid fa-truck-fast"></i>
+                    <span>1. DELIVERY</span>
+                    <span id="badge-delivery-count" class="ml-1 px-2 py-0.5 rounded-full text-xs bg-white/20 text-white font-mono">0</span>
+                </button>
+
+                <button id="tab-undelivered" onclick="switchWorkflow('undelivered')" class="flex-1 py-3 px-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all bg-slate-100 text-slate-600 hover:bg-slate-200">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span>2. UNDELIVERED</span>
+                    <span id="badge-undelivered-count" class="ml-1 px-2 py-0.5 rounded-full text-xs bg-slate-200 text-slate-700 font-mono">0</span>
+                </button>
+
+                <button id="tab-rto" onclick="switchWorkflow('rto')" class="flex-1 py-3 px-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all bg-slate-100 text-slate-600 hover:bg-slate-200">
+                    <i class="fa-solid fa-arrow-rotate-left"></i>
+                    <span>3. RTO / RETURN</span>
+                    <span id="badge-rto-count" class="ml-1 px-2 py-0.5 rounded-full text-xs bg-slate-200 text-slate-700 font-mono">0</span>
+                </button>
+            </div>
+
+            <!-- Report PDF Generator Action (4 Cols) -->
+            <div class="lg:col-span-4 flex items-center">
+                <button onclick="generatePDFReport()" class="w-full py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-base shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3">
+                    <i class="fa-solid fa-file-pdf text-xl"></i>
+                    <span id="generatePdfBtnText">GENERATE DELIVERY PDF</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ACTIVE WORKFLOW BANNER & INSTRUCTIONS -->
+        <div id="workflowBanner" class="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-4 rounded-2xl mb-6 shadow-md border border-blue-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div id="bannerIconContainer" class="w-10 h-10 rounded-xl bg-blue-500/30 flex items-center justify-center text-blue-300 text-xl font-bold border border-blue-400/20">
+                    <i id="bannerIcon" class="fa-solid fa-truck-fast"></i>
+                </div>
+                <div>
+                    <h2 id="bannerTitle" class="font-bold text-lg leading-tight">Delivery Handover Mode</h2>
+                    <p id="bannerDesc" class="text-xs text-blue-200 mt-0.5">Continuous mixed scanning of parcels before handover. Automatically detects Marketplace & Courier.</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-xl border border-white/10 text-xs font-mono">
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Session ID:</span>
+                <span id="sessionIdDisplay" class="font-bold text-blue-300">ARKO-1001</span>
+            </div>
+        </div>
+
+        <!-- MAIN SCANNER SECTION -->
+        <div class="bg-white rounded-2xl p-5 sm:p-6 shadow-md border border-slate-200/90 mb-6 relative overflow-hidden" id="scannerCard">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-3">
+                <label for="barcodeInput" class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <i class="fa-solid fa-barcode text-ankoBlue text-lg"></i>
+                    <span>Scan AWB / Tracking Barcode</span>
+                </label>
+                <div class="text-xs text-slate-500 flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+                    <i class="fa-solid fa-keyboard text-slate-400"></i>
+                    <span>Auto-Focus Enabled (Plug-and-play Scanner Compatible)</span>
+                </div>
+            </div>
+
+            <form id="scanForm" onsubmit="handleScanSubmit(event)" class="relative">
+                <input 
+                    type="text" 
+                    id="barcodeInput" 
+                    placeholder="Scan barcode or type AWB and hit Enter..." 
+                    autocomplete="off" 
+                    autofocus 
+                    class="w-full text-lg sm:text-2xl font-mono font-bold py-4 px-5 pr-14 rounded-xl border-2 border-slate-300 focus:border-ankoBlue focus:ring-4 focus:ring-blue-100 outline-none transition uppercase placeholder:text-slate-300 placeholder:font-normal"
+                >
+                <button type="submit" class="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg bg-ankoBlue hover:bg-blue-700 text-white flex items-center justify-center transition shadow-sm">
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+
+            <!-- LIVE STATUS FEEDBACK BANNER -->
+            <div id="statusAlert" class="mt-4 p-3.5 rounded-xl text-sm font-bold flex items-center gap-3 transition-all duration-200 bg-slate-100 text-slate-600 border border-slate-200">
+                <div id="statusIcon" class="w-7 h-7 rounded-lg bg-slate-200 flex items-center justify-center text-slate-500 shrink-0">
+                    <i class="fa-solid fa-circle-info"></i>
+                </div>
+                <div class="flex-grow">
+                    <span id="statusMessage">Ready for barcode scanning. Ensure scanner is connected.</span>
+                </div>
+                <span id="statusTimestamp" class="text-xs font-normal opacity-75 font-mono"></span>
+            </div>
+        </div>
+
+        <!-- METRICS & DASHBOARD STATS -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <!-- Initial Scanned -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80">
+                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Initial Scanned</div>
+                <div class="flex items-baseline justify-between">
+                    <span id="statInitialCount" class="text-3xl font-black text-slate-800 font-mono">0</span>
+                    <i class="fa-solid fa-boxes-stacked text-slate-300 text-xl"></i>
+                </div>
+                <div class="text-[11px] text-slate-400 mt-1">Unique delivery barcodes</div>
+            </div>
+
+            <!-- Undelivered -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80">
+                <div class="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">Undelivered</div>
+                <div class="flex items-baseline justify-between">
+                    <span id="statUndeliveredCount" class="text-3xl font-black text-amber-600 font-mono">0</span>
+                    <i class="fa-solid fa-triangle-exclamation text-amber-200 text-xl"></i>
+                </div>
+                <div class="text-[11px] text-slate-400 mt-1">Returned before handover</div>
+            </div>
+
+            <!-- Final Delivery -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 bg-gradient-to-br from-emerald-50/50 to-white">
+                <div class="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Final Delivery</div>
+                <div class="flex items-baseline justify-between">
+                    <span id="statFinalCount" class="text-3xl font-black text-emerald-600 font-mono">0</span>
+                    <i class="fa-solid fa-[#22C55E] fa-circle-check text-emerald-200 text-xl"></i>
+                </div>
+                <div class="text-[11px] text-emerald-600/80 font-medium mt-1">= Initial - Undelivered</div>
+            </div>
+
+            <!-- Independent RTO -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80">
+                <div class="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">RTO / Return</div>
+                <div class="flex items-baseline justify-between">
+                    <span id="statRtoCount" class="text-3xl font-black text-purple-600 font-mono">0</span>
+                    <i class="fa-solid fa-arrow-rotate-left text-purple-200 text-xl"></i>
+                </div>
+                <div class="text-[11px] text-slate-400 mt-1">Independent return session</div>
+            </div>
+        </div>
+
+        <!-- BREAKDOWN & SCAN LOG GRID -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- MARKETPLACE & COURIER LIVE SUMMARY (4 COLS) -->
+            <div class="lg:col-span-4 space-y-6">
+                <!-- Marketplace Summary Card -->
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80">
+                    <div class="flex items-center justify-between mb-4 border-b pb-3 border-slate-100">
+                        <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-store text-ankoBlue"></i>
+                            Marketplace Breakdown
+                        </h3>
+                        <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-mono" id="mktpTotalLabel">0 total</span>
+                    </div>
+                    <div id="marketplaceBreakdownList" class="space-y-3">
+                        <div class="text-center py-4 text-xs text-slate-400 italic">No parcels scanned yet</div>
+                    </div>
+                </div>
+
+                <!-- Courier Partner Summary Card -->
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80">
+                    <div class="flex items-center justify-between mb-4 border-b pb-3 border-slate-100">
+                        <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-truck-ramp-box text-indigo-600"></i>
+                            Courier Breakdown
+                        </h3>
+                        <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-mono" id="courierTotalLabel">0 total</span>
+                    </div>
+                    <div id="courierBreakdownList" class="space-y-3">
+                        <div class="text-center py-4 text-xs text-slate-400 italic">No parcels scanned yet</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCAN HISTORY TABLE (8 COLS) -->
+            <div class="lg:col-span-8">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 flex flex-col h-full min-h-[450px]">
+                    <!-- Table Header Controls -->
+                    <div class="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+                                <i class="fa-solid fa-list-check text-ankoBlue"></i>
+                                <span id="tableTitle">Delivery Scan History</span>
+                            </h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Live view of active session records, including duplicate logs</p>
+                        </div>
+                        
+                        <div class="flex items-center gap-2">
+                            <div class="relative">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                <input 
+                                    type="text" 
+                                    id="tableFilter" 
+                                    oninput="renderScanTable()" 
+                                    placeholder="Filter AWBs..." 
+                                    class="pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-ankoBlue w-36 sm:w-48 font-mono"
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Table Body -->
+                    <div class="flex-grow overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 tracking-wider border-b border-slate-100">
+                                    <th class="py-3 px-4">#</th>
+                                    <th class="py-3 px-4">AWB / Tracking ID</th>
+                                    <th class="py-3 px-4">Marketplace</th>
+                                    <th class="py-3 px-4">Courier</th>
+                                    <th class="py-3 px-4">Time</th>
+                                    <th class="py-3 px-4 text-right">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scanTableBody" class="divide-y divide-slate-100 text-xs">
+                                <!-- Dynamic rows rendered here -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Table Footer -->
+                    <div class="p-3 bg-slate-50 border-t border-slate-100 rounded-b-2xl flex items-center justify-between text-xs text-slate-500">
+                        <span id="tableRecordCount">Showing 0 records</span>
+                        <span class="text-[11px] text-slate-400">Continuous scan logs retain duplicate flags</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-white border-t border-slate-200 mt-8 py-4 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div>
+                <span class="font-bold text-slate-700">ARKO Logistics Systems</span> &copy; 2026. All rights reserved.
+            </div>
+            <div class="flex items-center gap-4 text-slate-400">
+                <span>High-Speed Warehouse Scanning</span>
+                <span>•</span>
+                <span>Auto-Reconciliation Engine</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- MODAL: PREFIX CONFIGURATION -->
+    <div id="configModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="bg-ankoNavy text-white p-4 sm:p-5 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-sliders text-ankoBlue text-lg"></i>
+                    <div>
+                        <h3 class="font-bold text-base">Configure AWB Prefix Rules</h3>
+                        <p class="text-xs text-slate-300">Map prefixes to Marketplace and Courier partners dynamically</p>
+                </div>
+            </div>
+            <button onclick="closeConfigModal()" class="text-slate-400 hover:text-white transition">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+
+        <div class="p-5 overflow-y-auto custom-scrollbar flex-grow space-y-5">
+            <!-- AWB Validation Settings -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved text-ankoBlue"></i>
+                    AWB Length Validation Limits
+                </h4>
+                <div class="flex items-center gap-3">
+                    <label class="text-xs font-semibold text-slate-600">Max Numeric Digits:</label>
+                    <input type="number" id="configMaxAwbLength" min="1" max="50" class="w-24 px-3 py-1.5 text-xs font-mono font-bold border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    <button onclick="saveMaxAwbLengthSetting()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition">
+                        Save Limit
+                    </button>
+                </div>
+            </div>
+
+            <!-- Add New Rule Form -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-plus-circle text-emerald-600"></i>
+                        Add New Mapping Rule
+                    </h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 mb-1">Prefix</label>
+                            <input type="text" id="newRulePrefix" placeholder="e.g. 1490 or ASF" class="w-full px-3 py-2 text-xs border rounded-lg uppercase font-mono focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 mb-1">Marketplace</label>
+                            <input type="text" id="newRuleMktp" placeholder="e.g. Meesho" class="w-full px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 mb-1">Courier Partner</label>
+                            <input type="text" id="newRuleCourier" placeholder="e.g. E-CART or Satofex" class="w-full px-3 py-2 text-xs border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+                    <button onclick="addNewPrefixRule()" class="w-full py-2 bg-ankoBlue hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-save"></i>
+                        Save Rule Mapping
+                    </button>
+                </div>
+
+                <!-- Existing Rules List -->
+                <div>
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">Active Prefix Rules</h4>
+                    <div class="border rounded-xl overflow-hidden">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-100 text-slate-600 font-bold uppercase text-[10px]">
+                                <tr>
+                                    <th class="py-2.5 px-3">Prefix</th>
+                                    <th class="py-2.5 px-3">Marketplace</th>
+                                    <th class="py-2.5 px-3">Courier Partner</th>
+                                    <th class="py-2.5 px-3 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="configRulesTable" class="divide-y divide-slate-100 font-mono">
+                                <!-- Rules populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button onclick="closeConfigModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: RESET CONFIRMATION -->
+    <div id="resetModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 p-6 text-center">
+            <div class="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-4">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800 mb-2">Confirm Session Reset</h3>
+            <p class="text-xs text-slate-600 mb-6 leading-relaxed">
+                Are you sure you want to reset all current data? This action cannot be undone and will erase all current Delivery, Undelivered, and RTO scan records.
+            </p>
+            <div class="flex items-center gap-3">
+                <button onclick="closeResetModal()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition">
+                    Cancel
+                </button>
+                <button onclick="executeResetSession()" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-md">
+                    Confirm Reset
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT APPLICATION LOGIC -->
+    <script>
+        /**
+         * DEFAULT CONFIGURATION RULES
+         * Prefix -> Marketplace -> Courier Partner
+         */
+        const DEFAULT_PREFIX_RULES = [
+            { prefix: "1490", marketplace: "Meesho", courier: "Delivery" },
+            { prefix: "5931", marketplace: "Flipkart", courier: "Delivery" },
+            { prefix: "ASF",  marketplace: "Meesho", courier: "Satofex" },
+            { prefix: "FMPC", marketplace: "Flipkart", courier: "E-CART" },
+            { prefix: "FMPP", marketplace: "Flipkart", courier: "E-CART" },
+            { prefix: "FMPR", marketplace: "Flipkart", courier: "E-CART" }
+        ];
+
+        // State variables
+        let activeWorkflow = 'delivery'; // 'delivery', 'undelivered', 'rto'
+        let prefixRules = [];
+        let maxAwbLength = 16; // Configurable max digits for numeric AWB
+        let deliveryScans = [];   // [{ awb, marketplace, courier, timestamp, isDuplicate: bool, isUnknown: bool }]
+        let undeliveredScans = [];// [{ awb, marketplace, courier, timestamp }]
+        let rtoScans = [];        // [{ awb, marketplace, courier, timestamp, isDuplicate: bool, isUnknown: bool }]
+        let audioEnabled = true;
+        let db = null;
+        let activeSessionId = 'ARKO-' + Math.floor(1000 + Math.random() * 9000);
+
+        // Web Audio API Sound Effects Synthesizer
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            if (!audioEnabled) return;
+            try {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'success') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(587.33, now); // D5
+                    osc.frequency.setValueAtTime(880, now + 0.08); // A5
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'duplicate') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.setValueAtTime(300, now + 0.1);
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else if (type === 'error') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(180, now);
+                    osc.frequency.setValueAtTime(120, now + 0.12);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                }
+            } catch (e) {
+                console.warn("Audio feedback error:", e);
+            }
+        }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            const btnIcon = document.getElementById('audioIcon');
+            const btnText = document.querySelector('#audioToggleBtn span');
+            if (audioEnabled) {
+                btnIcon.className = 'fa-solid fa-volume-high text-emerald-400';
+                if (btnText) btnText.innerText = 'Sound On';
+            } else {
+                btnIcon.className = 'fa-solid fa-volume-xmark text-rose-400';
+                if (btnText) btnText.innerText = 'Muted';
+            }
+        }
+
+        // --- INDEXEDDB STORAGE SYSTEM ---
+        function initIndexedDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('ArkoParcelDB', 1);
+                request.onupgradeneeded = (e) => {
+                    const database = e.target.result;
+                    if (!database.objectStoreNames.contains('sessionStore')) {
+                        database.createObjectStore('sessionStore', { keyPath: 'id' });
+                    }
+                    if (!database.objectStoreNames.contains('configStore')) {
+                        database.createObjectStore('configStore', { keyPath: 'id' });
+                    }
+                };
+                request.onsuccess = (e) => {
+                    db = e.target.result;
+                    resolve(db);
+                };
+                request.onerror = (e) => {
+                    console.error("IndexedDB error:", e);
+                    reject(e);
+                };
+            });
+        }
+
+        async function saveStateToDB() {
+            if (!db) return;
+            try {
+                const tx = db.transaction(['sessionStore', 'configStore'], 'readwrite');
+                
+                // Save session state
+                tx.objectStore('sessionStore').put({
+                    id: 'active_session',
+                    sessionId: activeSessionId,
+                    deliveryScans: deliveryScans,
+                    undeliveredScans: undeliveredScans,
+                    rtoScans: rtoScans
+                });
+
+                // Save prefix configuration & max AWB length
+                tx.objectStore('configStore').put({
+                    id: 'prefix_rules',
+                    rules: prefixRules,
+                    maxAwbLength: maxAwbLength
+                });
+            } catch (err) {
+                console.warn("Error saving to IndexedDB:", err);
+            }
+        }
+
+        async function loadStateFromDB() {
+            if (!db) return;
+            return new Promise((resolve) => {
+                const tx = db.transaction(['sessionStore', 'configStore'], 'readonly');
+                
+                // Load rules & max length setting
+                const configReq = tx.objectStore('configStore').get('prefix_rules');
+                configReq.onsuccess = () => {
+                    if (configReq.result) {
+                        if (configReq.result.rules && configReq.result.rules.length > 0) {
+                            prefixRules = configReq.result.rules;
+                        } else {
+                            prefixRules = [...DEFAULT_PREFIX_RULES];
+                        }
+                        if (configReq.result.maxAwbLength) {
+                            maxAwbLength = configReq.result.maxAwbLength;
+                        }
+                    } else {
+                        prefixRules = [...DEFAULT_PREFIX_RULES];
+                    }
+                };
+
+                // Load active session
+                const sessionReq = tx.objectStore('sessionStore').get('active_session');
+                sessionReq.onsuccess = () => {
+                    if (sessionReq.result) {
+                        activeSessionId = sessionReq.result.sessionId || activeSessionId;
+                        deliveryScans = sessionReq.result.deliveryScans || [];
+                        undeliveredScans = sessionReq.result.undeliveredScans || [];
+                        rtoScans = sessionReq.result.rtoScans || [];
+                    }
+                    resolve();
+                };
+            });
+        }
+
+        // --- APP INITIALIZATION ---
+        window.addEventListener('load', async () => {
+            try {
+                await initIndexedDB();
+                await loadStateFromDB();
+            } catch (e) {
+                prefixRules = [...DEFAULT_PREFIX_RULES];
+            }
+
+            document.getElementById('sessionIdDisplay').innerText = activeSessionId;
+            
+            // Maintain continuous focus on input field
+            const inputEl = document.getElementById('barcodeInput');
+            inputEl.focus();
+            
+            // Refocus when clicking outside non-interactive areas
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('button') && 
+                    !e.target.closest('input') && 
+                    !e.target.closest('table') && 
+                    !e.target.closest('.fixed')) {
+                    inputEl.focus();
+                }
+            });
+
+            updateAllUI();
+        });
+
+        // --- PREFIX MATCHING ENGINE WITH "OTHERS" FALLBACK ---
+        function matchAWBRules(awb) {
+            const cleanAWB = awb.trim().toUpperCase();
+            
+            // Sort rules by prefix length descending so longer/more specific prefixes match first
+            const sortedRules = [...prefixRules].sort((a, b) => b.prefix.length - a.prefix.length);
+
+            for (const r of sortedRules) {
+                if (cleanAWB.startsWith(r.prefix.toUpperCase())) {
+                    return {
+                        matched: true,
+                        marketplace: r.marketplace && r.marketplace.trim() !== "" ? r.marketplace : "Others",
+                        courier: r.courier && r.courier.trim() !== "" ? r.courier : "Others",
+                        prefix: r.prefix
+                    };
+                }
+            }
+
+            // Fallback for unknown / unmapped AWBs
+            return {
+                matched: false,
+                marketplace: "Others",
+                courier: "Others",
+                prefix: ""
+            };
+        }
+
+        // --- WORKFLOW SWITCHING ---
+        function switchWorkflow(mode) {
+            activeWorkflow = mode;
+
+            const tabDel = document.getElementById('tab-delivery');
+            const tabUnd = document.getElementById('tab-undelivered');
+            const tabRto = document.getElementById('tab-rto');
+
+            const bannerTitle = document.getElementById('bannerTitle');
+            const bannerDesc = document.getElementById('bannerDesc');
+            const bannerIcon = document.getElementById('bannerIcon');
+            const bannerIconContainer = document.getElementById('bannerIconContainer');
+            const pdfBtnText = document.getElementById('generatePdfBtnText');
+            const workflowBanner = document.getElementById('workflowBanner');
+
+            // Reset tab styles
+            [tabDel, tabUnd, tabRto].forEach(tab => {
+                tab.className = "flex-1 py-3 px-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all bg-slate-100 text-slate-600 hover:bg-slate-200";
+            });
+
+            if (mode === 'delivery') {
+                tabDel.className = "flex-1 py-3 px-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all shadow-sm bg-ankoBlue text-white";
+                bannerTitle.innerText = "Delivery Handover Mode";
+                bannerDesc.innerText = "Continuous mixed scanning of parcels before handover. Automatically detects Marketplace & Courier.";
+                bannerIcon.className = "fa-solid fa-truck-fast";
+                bannerIconContainer.className = "w-10 h-10 rounded-xl bg-blue-500/30 flex items-center justify-center text-blue-300 text-xl font-bold border border-blue-400/20";
+                workflowBanner.className = "bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-4 rounded-2xl mb-6 shadow-md border border-blue-800 flex flex-col md:flex-row md:items-center justify-between gap-3";
+                pdfBtnText.innerText = "GENERATE DELIVERY PDF";
+            } else if (mode === 'undelivered') {
+                tabUnd.className = "flex-1 py-3 px-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all bg-amber-500 text-white shadow-sm";
+                bannerTitle.innerText = "Undelivered Reconciliation Mode";
+                bannerDesc.innerText = "Scan unhanded parcels to deduct them from initial delivery counts.";
+                bannerIcon.className = "fa-solid fa-triangle-exclamation";
+                bannerIconContainer.className = "w-10 h-10 rounded-xl bg-amber-500/30 flex items-center justify-center text-amber-200 text-xl font-bold border border-amber-400/20";
+                workflowBanner.className = "bg-gradient-to-r from-amber-900 to-orange-900 text-white p-4 rounded-2xl mb-6 shadow-md border border-amber-800 flex flex-col md:flex-row md:items-center justify-between gap-3";
+                pdfBtnText.innerText = "GENERATE DELIVERY PDF";
+            } else if (mode === 'rto') {
+                tabRto.className = "flex-1 py-3 px-4 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all bg-purple-600 text-white shadow-sm";
+                bannerTitle.innerText = "RTO / Return Mode";
+                bannerDesc.innerText = "Scan returned parcels into an independent RTO manifest. Does not alter Delivery totals.";
+                bannerIcon.className = "fa-solid fa-arrow-rotate-left";
+                bannerIconContainer.className = "w-10 h-10 rounded-xl bg-purple-500/30 flex items-center justify-center text-purple-200 text-xl font-bold border border-purple-400/20";
+                workflowBanner.className = "bg-gradient-to-r from-purple-900 to-indigo-950 text-white p-4 rounded-2xl mb-6 shadow-md border border-purple-800 flex flex-col md:flex-row md:items-center justify-between gap-3";
+                pdfBtnText.innerText = "GENERATE RTO PDF";
+            }
+
+            updateAllUI();
+            document.getElementById('barcodeInput').focus();
+        }
+
+        // --- BARCODE CLEANING ENGINE ---
+        function cleanAWBString(rawAwb) {
+            if (!rawAwb) return "";
+            // Remove \ / - , . : | _ and all whitespace (spaces, tabs, newlines)
+            return rawAwb.replace(/[\/\\\,\.\:\|\_\s\-]/g, '').toUpperCase();
+        }
+
+        // --- INTELLIGENT AWB EXTRACTION ENGINE ---
+        function cleanAndExtractAWB(rawInput) {
+            if (!rawInput) return { success: false, reason: "INVALID – EMPTY INPUT" };
+
+            // 1. First pass: sanitize symbols and whitespace
+            const sanitized = cleanAWBString(rawInput);
+            if (!sanitized) return { success: false, reason: "INVALID – NOT A TRACKING NUMBER" };
+
+            // 2. Check direct prefix matching against configured rules
+            const sortedRules = [...prefixRules].sort((a, b) => b.prefix.length - a.prefix.length);
+
+            for (const r of sortedRules) {
+                const prefixUpper = r.prefix.toUpperCase();
+                const prefixIndex = sanitized.indexOf(prefixUpper);
+
+                if (prefixIndex !== -1) {
+                    // Extract starting from prefix
+                    const candidateFromPrefix = sanitized.substring(prefixIndex);
+
+                    // Extract contiguous alphanumeric candidate
+                    // AWB numbers generally consist of prefix + digits (up to maxAwbLength)
+                    // Match prefix + digits
+                    const matchPattern = new RegExp(`^(${prefixUpper}\\d{1,${maxAwbLength}})`);
+                    const match = candidateFromPrefix.match(matchPattern);
+
+                    if (match && match[1]) {
+                        return { success: true, awb: match[1] };
+                    }
+
+                    // Fallback: match prefix followed by general alphanumeric tracking length
+                    const generalMatch = candidateFromPrefix.match(new RegExp(`^(${prefixUpper}[A-Z0-9]{3,20})`));
+                    if (generalMatch && generalMatch[1]) {
+                        // Check numeric part limit inside extracted string
+                        const numericPart = generalMatch[1].replace(/[^0-9]/g, '');
+                        if (numericPart.length <= maxAwbLength) {
+                            return { success: true, awb: generalMatch[1] };
+                        }
+                    }
+                }
+            }
+
+            // 3. Fallback extraction for unknown/unmapped AWBs
+            // Check if string is purely numeric or simple alphanumeric without metadata bloat
+            const numericMatches = sanitized.match(/\d+/g);
+            if (numericMatches) {
+                // Find contiguous numeric block up to maxAwbLength
+                for (const numBlock of numericMatches) {
+                    if (numBlock.length >= 4 && numBlock.length <= maxAwbLength) {
+                        // If raw input starts with letters (e.g. MF, ASF) followed by digits
+                        const alphaNumericMatch = sanitized.match(new RegExp(`^([A-Z]{1,5}${numBlock})`));
+                        if (alphaNumericMatch && alphaNumericMatch[1]) {
+                            return { success: true, awb: alphaNumericMatch[1] };
+                        }
+                        return { success: true, awb: numBlock };
+                    }
+                }
+            }
+
+            // If sanitized length is clean and within acceptable numeric limits
+            const totalNumericDigits = sanitized.replace(/[^0-9]/g, '').length;
+            if (totalNumericDigits > 0 && totalNumericDigits <= maxAwbLength && sanitized.length <= 25) {
+                return { success: true, awb: sanitized };
+            }
+
+            return { success: false, reason: "INVALID BARCODE – NOT A VALID TRACKING NUMBER" };
+        }
+
+        // --- BARCODE VALIDATION ENGINE ---
+        function validateAWB(rawAwb) {
+            const extraction = cleanAndExtractAWB(rawAwb);
+            
+            if (!extraction.success) {
+                return { isValid: false, message: extraction.reason };
+            }
+
+            const cleanAWB = extraction.awb;
+
+            // Enforce max numeric length check on extracted AWB
+            const numericOnly = cleanAWB.replace(/[^0-9]/g, '');
+            if (numericOnly.length > maxAwbLength) {
+                return { isValid: false, message: `INVALID BARCODE – EXCEEDS ${maxAwbLength} DIGITS (${numericOnly.length} digits)` };
+            }
+
+            return { isValid: true, awb: cleanAWB };
+        }
+
+        // --- BARCODE SUBMISSION HANDLER ---
+        function handleScanSubmit(event) {
+            event.preventDefault();
+            const input = document.getElementById('barcodeInput');
+            const rawInput = input.value;
+            input.value = '';
+
+            const validation = validateAWB(rawInput);
+            if (!validation.isValid) {
+                setStatus(validation.message, "error");
+                playSound('error');
+                triggerCardFlash('error');
+                input.focus();
+                return;
+            }
+
+            const awb = validation.awb;
+            const timestamp = new Date().toLocaleTimeString();
+
+            if (activeWorkflow === 'delivery') {
+                processDeliveryScan(awb, timestamp);
+            } else if (activeWorkflow === 'undelivered') {
+                processUndeliveredScan(awb, timestamp);
+            } else if (activeWorkflow === 'rto') {
+                processRtoScan(awb, timestamp);
+            }
+
+            saveStateToDB();
+            updateAllUI();
+            input.focus();
+        }
+
+        // 1. DELIVERY SCAN PROCESSING
+        function processDeliveryScan(awb, timestamp) {
+            const ruleMatch = matchAWBRules(awb);
+
+            // Check if AWB was previously scanned in delivery batch
+            const existingIndex = deliveryScans.findIndex(item => item.awb === awb);
+            const isDuplicate = existingIndex !== -1;
+
+            deliveryScans.unshift({
+                awb: awb,
+                marketplace: ruleMatch.marketplace,
+                courier: ruleMatch.courier,
+                timestamp: timestamp,
+                isDuplicate: isDuplicate,
+                isUnknown: !ruleMatch.matched
+            });
+
+            if (isDuplicate) {
+                setStatus(`DUPLICATE — ALREADY SCANNED (${awb})`, "duplicate");
+                playSound('duplicate');
+                triggerCardFlash('duplicate');
+            } else if (!ruleMatch.matched) {
+                setStatus(`SUCCESS — UNKNOWN / UNMAPPED AWB PREFIX (${awb})`, "error");
+                playSound('error');
+                triggerCardFlash('error');
+            } else {
+                setStatus(`SUCCESS — VALID AWB: ${awb} (${ruleMatch.marketplace} / ${ruleMatch.courier})`, "success");
+                playSound('success');
+                triggerCardFlash('success');
+            }
+        }
+
+        // 2. UNDELIVERED SCAN PROCESSING
+        function processUndeliveredScan(awb, timestamp) {
+            const ruleMatch = matchAWBRules(awb);
+
+            // Verify existence in delivery batch
+            const uniqueDeliveries = getUniqueDeliveryList();
+            const existsInDelivery = uniqueDeliveries.some(item => item.awb === awb);
+
+            if (!existsInDelivery) {
+                setStatus(`ERROR — AWB NOT FOUND IN DELIVERY BATCH (${awb})`, "error");
+                playSound('error');
+                triggerCardFlash('error');
+                return;
+            }
+
+            // Check if already marked undelivered
+            const alreadyUndelivered = undeliveredScans.some(item => item.awb === awb);
+
+            if (alreadyUndelivered) {
+                setStatus(`ALREADY MARKED UNDELIVERED (${awb})`, "duplicate");
+                playSound('duplicate');
+                triggerCardFlash('duplicate');
+                return;
+            }
+
+            undeliveredScans.unshift({
+                awb: awb,
+                marketplace: ruleMatch.marketplace,
+                courier: ruleMatch.courier,
+                timestamp: timestamp
+            });
+
+            setStatus(`MARKED UNDELIVERED — DEDUCTED FROM FINAL COUNT (${awb})`, "success");
+            playSound('success');
+            triggerCardFlash('success');
+        }
+
+        // 3. RTO SCAN PROCESSING
+        function processRtoScan(awb, timestamp) {
+            const ruleMatch = matchAWBRules(awb);
+
+            const existingIndex = rtoScans.findIndex(item => item.awb === awb);
+            const isDuplicate = existingIndex !== -1;
+
+            rtoScans.unshift({
+                awb: awb,
+                marketplace: ruleMatch.marketplace,
+                courier: ruleMatch.courier,
+                timestamp: timestamp,
+                isDuplicate: isDuplicate,
+                isUnknown: !ruleMatch.matched
+            });
+
+            if (isDuplicate) {
+                setStatus(`DUPLICATE — RTO AWB ALREADY SCANNED (${awb})`, "duplicate");
+                playSound('duplicate');
+                triggerCardFlash('duplicate');
+            } else {
+                setStatus(`SUCCESS — RTO RECORDED (${awb})`, "success");
+                playSound('success');
+                triggerCardFlash('success');
+            }
+        }
+
+        // --- RECONCILIATION HELPERS ---
+        function getUniqueDeliveryList() {
+            const uniqueMap = new Map();
+            [...deliveryScans].reverse().forEach(item => {
+                if (!item.isDuplicate) {
+                    uniqueMap.set(item.awb, item);
+                }
+            });
+            return Array.from(uniqueMap.values());
+        }
+
+        function getFinalDeliveryList() {
+            const uniqueDeliveries = getUniqueDeliveryList();
+            const undeliveredSet = new Set(undeliveredScans.map(u => u.awb));
+            return uniqueDeliveries.filter(item => !undeliveredSet.has(item.awb));
+        }
+
+        // --- UI REFRESH AND RENDER ENGINE ---
+        function setStatus(msg, type) {
+            const alertEl = document.getElementById('statusAlert');
+            const iconEl = document.getElementById('statusIcon');
+            const msgEl = document.getElementById('statusMessage');
+            const timeEl = document.getElementById('statusTimestamp');
+
+            msgEl.innerText = msg;
+            timeEl.innerText = new Date().toLocaleTimeString();
+
+            if (type === 'success') {
+                alertEl.className = "mt-4 p-3.5 rounded-xl text-sm font-bold flex items-center gap-3 transition-all duration-200 bg-emerald-50 text-emerald-800 border border-emerald-200";
+                iconEl.className = "w-7 h-7 rounded-lg bg-emerald-200 flex items-center justify-center text-emerald-700 shrink-0";
+                iconEl.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+            } else if (type === 'duplicate') {
+                alertEl.className = "mt-4 p-3.5 rounded-xl text-sm font-bold flex items-center gap-3 transition-all duration-200 bg-amber-50 text-amber-800 border border-amber-200";
+                iconEl.className = "w-7 h-7 rounded-lg bg-amber-200 flex items-center justify-center text-amber-700 shrink-0";
+                iconEl.innerHTML = '<i class="fa-solid fa-copy"></i>';
+            } else if (type === 'error') {
+                alertEl.className = "mt-4 p-3.5 rounded-xl text-sm font-bold flex items-center gap-3 transition-all duration-200 bg-rose-50 text-rose-800 border border-rose-200";
+                iconEl.className = "w-7 h-7 rounded-lg bg-rose-200 flex items-center justify-center text-rose-700 shrink-0";
+                iconEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+            } else {
+                alertEl.className = "mt-4 p-3.5 rounded-xl text-sm font-bold flex items-center gap-3 transition-all duration-200 bg-slate-100 text-slate-600 border border-slate-200";
+                iconEl.className = "w-7 h-7 rounded-lg bg-slate-200 flex items-center justify-center text-slate-500 shrink-0";
+                iconEl.innerHTML = '<i class="fa-solid fa-circle-info"></i>';
+            }
+        }
+
+        function triggerCardFlash(type) {
+            const card = document.getElementById('scannerCard');
+            card.classList.remove('scan-flash-success', 'scan-flash-duplicate', 'scan-flash-error');
+            void card.offsetWidth; // Force reflow
+            if (type === 'success') card.classList.add('scan-flash-success');
+            if (type === 'duplicate') card.classList.add('scan-flash-duplicate');
+            if (type === 'error') card.classList.add('scan-flash-error');
+        }
+
+        function updateAllUI() {
+            // Badges
+            const uniqueDeliveries = getUniqueDeliveryList();
+            document.getElementById('badge-delivery-count').innerText = uniqueDeliveries.length;
+            document.getElementById('badge-undelivered-count').innerText = undeliveredScans.length;
+
+            const rtoUniqueMap = new Map();
+            [...rtoScans].reverse().forEach(r => { if (!r.isDuplicate) rtoUniqueMap.set(r.awb, r); });
+            document.getElementById('badge-rto-count').innerText = rtoUniqueMap.size;
+
+            // Stats
+            const initialCount = uniqueDeliveries.length;
+            const undeliveredCount = undeliveredScans.length;
+            const finalCount = Math.max(0, initialCount - undeliveredCount);
+
+            document.getElementById('statInitialCount').innerText = initialCount;
+            document.getElementById('statUndeliveredCount').innerText = undeliveredCount;
+            document.getElementById('statFinalCount').innerText = finalCount;
+            document.getElementById('statRtoCount').innerText = rtoUniqueMap.size;
+
+            // Breakdown lists & Scan History Table
+            renderBreakdowns();
+            renderScanTable();
+        }
+
+        function renderBreakdowns() {
+            let activeList = [];
+            if (activeWorkflow === 'delivery' || activeWorkflow === 'undelivered') {
+                activeList = getFinalDeliveryList();
+            } else {
+                const rtoUniqueMap = new Map();
+                [...rtoScans].reverse().forEach(r => { if (!r.isDuplicate) rtoUniqueMap.set(r.awb, r); });
+                activeList = Array.from(rtoUniqueMap.values());
+            }
+
+            // Marketplace Tally
+            const mktpCounts = {};
+            // Courier Tally
+            const courierCounts = {};
+
+            activeList.forEach(item => {
+                const mktp = item.marketplace || "Others";
+                const courier = item.courier || "Others";
+                mktpCounts[mktp] = (mktpCounts[mktp] || 0) + 1;
+                courierCounts[courier] = (courierCounts[courier] || 0) + 1;
+            });
+
+            document.getElementById('mktpTotalLabel').innerText = `${activeList.length} total`;
+            document.getElementById('courierTotalLabel').innerText = `${activeList.length} total`;
+
+            // Render Marketplace List
+            const mktpContainer = document.getElementById('marketplaceBreakdownList');
+            const mktpKeys = Object.keys(mktpCounts);
+            if (mktpKeys.length === 0) {
+                mktpContainer.innerHTML = `<div class="text-center py-4 text-xs text-slate-400 italic">No parcels scanned yet</div>`;
+            } else {
+                mktpContainer.innerHTML = mktpKeys.map(k => `
+                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="text-xs font-bold text-slate-700">${k}</span>
+                        <span class="text-xs font-mono font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md">${mktpCounts[k]}</span>
+                    </div>
+                `).join('');
+            }
+
+            // Render Courier List
+            const courierContainer = document.getElementById('courierBreakdownList');
+            const courierKeys = Object.keys(courierCounts);
+            if (courierKeys.length === 0) {
+                courierContainer.innerHTML = `<div class="text-center py-4 text-xs text-slate-400 italic">No parcels scanned yet</div>`;
+            } else {
+                courierContainer.innerHTML = courierKeys.map(k => `
+                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span class="text-xs font-bold text-slate-700">${k}</span>
+                        <span class="text-xs font-mono font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md">${courierCounts[k]}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function renderScanTable() {
+            const tbody = document.getElementById('scanTableBody');
+            const titleEl = document.getElementById('tableTitle');
+            const countEl = document.getElementById('tableRecordCount');
+            const filterVal = document.getElementById('tableFilter').value.trim().toUpperCase();
+
+            let records = [];
+
+            if (activeWorkflow === 'delivery') {
+                titleEl.innerText = "Delivery Scan History";
+                records = deliveryScans;
+            } else if (activeWorkflow === 'undelivered') {
+                titleEl.innerText = "Undelivered Log";
+                records = undeliveredScans;
+            } else if (activeWorkflow === 'rto') {
+                titleEl.innerText = "RTO / Return Scan History";
+                records = rtoScans;
+            }
+
+            if (filterVal) {
+                records = records.filter(r => r.awb.includes(filterVal) || (r.marketplace && r.marketplace.toUpperCase().includes(filterVal)));
+            }
+
+            countEl.innerText = `Showing ${records.length} records`;
+
+            if (records.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-8 text-slate-400 italic">
+                            No records found in current workflow session.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            const undeliveredSet = new Set(undeliveredScans.map(u => u.awb));
+
+            tbody.innerHTML = records.map((r, i) => {
+                let statusBadge = "";
+
+                if (activeWorkflow === 'delivery') {
+                    if (r.isDuplicate) {
+                        statusBadge = `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-1 justify-end w-max ml-auto">
+                            <i class="fa-solid fa-copy"></i> DUPLICATE
+                        </span>`;
+                    } else if (undeliveredSet.has(r.awb)) {
+                        statusBadge = `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 justify-end w-max ml-auto">
+                            <i class="fa-solid fa-ban"></i> UNDELIVERED
+                        </span>`;
+                    } else if (r.isUnknown) {
+                        statusBadge = `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300 flex items-center gap-1 justify-end w-max ml-auto">
+                            <i class="fa-solid fa-question"></i> UNMAPPED
+                        </span>`;
+                    } else {
+                        statusBadge = `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1 justify-end w-max ml-auto">
+                            <i class="fa-solid fa-check"></i> SCANNED
+                        </span>`;
+                    }
+                } else if (activeWorkflow === 'undelivered') {
+                    statusBadge = `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-1 justify-end w-max ml-auto">
+                        <i class="fa-solid fa-triangle-exclamation"></i> DEDUCTED
+                    </span>`;
+                } else if (activeWorkflow === 'rto') {
+                    if (r.isDuplicate) {
+                        statusBadge = `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-1 justify-end w-max ml-auto">
+                            <i class="fa-solid fa-copy"></i> DUPLICATE
+                        </span>`;
+                    } else {
+                        statusBadge = `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-1 justify-end w-max ml-auto">
+                            <i class="fa-solid fa-rotate-left"></i> RTO RECORDED
+                        </span>`;
+                    }
+                }
+
+                return `
+                    <tr class="hover:bg-slate-50/80 transition">
+                        <td class="py-3 px-4 text-slate-400 font-mono">${records.length - i}</td>
+                        <td class="py-3 px-4 font-mono font-bold text-slate-800">${r.awb}</td>
+                        <td class="py-3 px-4 text-slate-600 font-medium">${r.marketplace || "Others"}</td>
+                        <td class="py-3 px-4 text-slate-600 font-medium">${r.courier || "Others"}</td>
+                        <td class="py-3 px-4 text-slate-400 font-mono text-[11px]">${r.timestamp}</td>
+                        <td class="py-3 px-4 text-right">${statusBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // --- CONFIGURATION MODAL HANDLERS ---
+        function openConfigModal() {
+            document.getElementById('configMaxAwbLength').value = maxAwbLength;
+            renderConfigRulesTable();
+            document.getElementById('configModal').classList.remove('hidden');
+        }
+
+        function saveMaxAwbLengthSetting() {
+            const val = parseInt(document.getElementById('configMaxAwbLength').value, 10);
+            if (val && val > 0 && val <= 50) {
+                maxAwbLength = val;
+                saveStateToDB();
+                alert(`Maximum AWB digit limit updated to ${maxAwbLength}.`);
+            } else {
+                alert("Please enter a valid numeric digit limit between 1 and 50.");
+            }
+        }
+
+        function closeConfigModal() {
+            document.getElementById('configModal').classList.add('hidden');
+            document.getElementById('barcodeInput').focus();
+        }
+
+        function renderConfigRulesTable() {
+            const tbody = document.getElementById('configRulesTable');
+            tbody.innerHTML = prefixRules.map((rule, idx) => `
+                <tr class="hover:bg-slate-50">
+                    <td class="py-2.5 px-3 font-bold text-ankoBlue">${rule.prefix}</td>
+                    <td class="py-2.5 px-3 font-sans font-semibold">${rule.marketplace}</td>
+                    <td class="py-2.5 px-3 font-sans font-semibold">${rule.courier}</td>
+                    <td class="py-2.5 px-3 text-right">
+                        <button onclick="deletePrefixRule(${idx})" class="text-rose-600 hover:text-rose-800 p-1" title="Delete Rule">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function addNewPrefixRule() {
+            const prefix = document.getElementById('newRulePrefix').value.trim().toUpperCase();
+            const marketplace = document.getElementById('newRuleMktp').value.trim();
+            const courier = document.getElementById('newRuleCourier').value.trim();
+
+            if (!prefix || !marketplace || !courier) {
+                alert("Please complete all prefix mapping fields.");
+                return;
+            }
+
+            // Check if prefix already exists
+            const existing = prefixRules.find(r => r.prefix === prefix);
+            if (existing) {
+                existing.marketplace = marketplace;
+                existing.courier = courier;
+            } else {
+                prefixRules.push({ prefix, marketplace, courier });
+            }
+
+            document.getElementById('newRulePrefix').value = '';
+            document.getElementById('newRuleMktp').value = '';
+            document.getElementById('newRuleCourier').value = '';
+
+            renderConfigRulesTable();
+            saveStateToDB();
+            updateAllUI();
+        }
+
+        function deletePrefixRule(index) {
+            prefixRules.splice(index, 1);
+            renderConfigRulesTable();
+            saveStateToDB();
+            updateAllUI();
+        }
+
+        // --- RESET MODAL HANDLERS ---
+        function triggerResetConfirmation() {
+            document.getElementById('resetModal').classList.remove('hidden');
+        }
+
+        function closeResetModal() {
+            document.getElementById('resetModal').classList.add('hidden');
+            document.getElementById('barcodeInput').focus();
+        }
+
+        function executeResetSession() {
+            deliveryScans = [];
+            undeliveredScans = [];
+            rtoScans = [];
+            activeSessionId = 'ARKO-' + Math.floor(1000 + Math.random() * 9000);
+
+            document.getElementById('sessionIdDisplay').innerText = activeSessionId;
+            closeResetModal();
+
+            saveStateToDB();
+            updateAllUI();
+            setStatus("Session reset successfully. Start continuous scanning.", "info");
+        }
+
+        // --- PDF GENERATION ENGINE ---
+        function generatePDFReport() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            const isRtoReport = (activeWorkflow === 'rto');
+            const reportDate = new Date().toLocaleDateString();
+            const reportTime = new Date().toLocaleTimeString();
+
+            // Colors
+            const navyColor = [15, 23, 42];
+
+            // 1. BRANDING HEADER
+            doc.setFillColor(...navyColor);
+            doc.rect(0, 0, 210, 32, 'F');
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('Helvetica', 'bold');
+            doc.setFontSize(22);
+            doc.text("ARKO LOGISTICS", 14, 18);
+
+            doc.setFontSize(10);
+            doc.setFont('Helvetica', 'normal');
+            doc.setTextColor(191, 219, 254);
+            const reportTypeTitle = isRtoReport ? "RTO / RETURN RECONCILIATION REPORT" : "DELIVERY & HANDOVER RECONCILIATION REPORT";
+            doc.text(reportTypeTitle, 14, 26);
+
+            // Metadata box top-right
+            doc.setFontSize(8);
+            doc.setTextColor(255, 255, 255);
+            doc.text(`Batch/Session: ${activeSessionId}`, 196, 12, { align: 'right' });
+            doc.text(`Date: ${reportDate} ${reportTime}`, 196, 18, { align: 'right' });
+
+            let startY = 40;
+
+            let sourceData = [];
+
+            if (!isRtoReport) {
+                // DELIVERY REPORT CALCULATIONS
+                const uniqueDeliveries = getUniqueDeliveryList();
+                const initialCount = uniqueDeliveries.length;
+                const undeliveredCount = undeliveredScans.length;
+                const finalCount = Math.max(0, initialCount - undeliveredCount);
+
+                // Summary Cards
+                doc.setDrawColor(226, 232, 240);
+                doc.setFillColor(248, 250, 252);
+                doc.roundedRect(14, startY, 56, 22, 2, 2, 'FD');
+                doc.roundedRect(77, startY, 56, 22, 2, 2, 'FD');
+                doc.roundedRect(140, startY, 56, 22, 2, 2, 'FD');
+
+                doc.setFontSize(8);
+                doc.setTextColor(100, 116, 139);
+                doc.text("INITIAL SCANNED", 18, startY + 7);
+                doc.text("UNDELIVERED", 81, startY + 7);
+                doc.text("FINAL DELIVERY", 144, startY + 7);
+
+                doc.setFontSize(14);
+                doc.setFont('Helvetica', 'bold');
+                doc.setTextColor(15, 23, 42);
+                doc.text(String(initialCount), 18, startY + 17);
+                
+                doc.setTextColor(217, 119, 6);
+                doc.text(String(undeliveredCount), 81, startY + 17);
+
+                doc.setTextColor(22, 163, 74);
+                doc.text(String(finalCount), 144, startY + 17);
+
+                startY += 30;
+
+                // Build unified list of final deliveries + undelivered items
+            const finalDeliveries = getFinalDeliveryList().map(item => ({
+                ...item,
+                statusText: "FINAL DELIVERED"
+            }));
+
+            const undeliveredItems = undeliveredScans.map(uItem => ({
+                awb: uItem.awb,
+                marketplace: uItem.marketplace || "Others",
+                courier: uItem.courier || "Others",
+                timestamp: uItem.timestamp,
+                statusText: "UNDELIVERED (EXCLUDED)"
+            }));
+
+            // Filter sourceData to guarantee only valid extracted AWBs enter the PDF
+            sourceData = [...finalDeliveries, ...undeliveredItems].filter(item => {
+                const val = validateAWB(item.awb);
+                return val.isValid;
+            });
+
+        } else {
+            // RTO REPORT CALCULATIONS
+            const rtoUniqueMap = new Map();
+            [...rtoScans].reverse().forEach(r => {
+                if (!r.isDuplicate) rtoUniqueMap.set(r.awb, r);
+            });
+            const validRtos = Array.from(rtoUniqueMap.values());
+
+            // Summary Card
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(248, 250, 252);
+            doc.roundedRect(14, startY, 182, 22, 2, 2, 'FD');
+
+            doc.setFontSize(8);
+            doc.setTextColor(100, 116, 139);
+            doc.text("TOTAL VALID RTO / RETURNED PARCELS", 18, startY + 7);
+
+            doc.setFontSize(14);
+            doc.setFont('Helvetica', 'bold');
+            doc.setTextColor(147, 51, 234);
+            doc.text(String(validRtos.length), 18, startY + 17);
+
+            startY += 30;
+
+            sourceData = validRtos.filter(item => validateAWB(item.awb).isValid).map(item => ({
+                ...item,
+                statusText: "RETURNED (RTO)"
+            }));
+        }
+
+        // --- AUTOMATIC MARKETPLACE & COURIER HIERARCHICAL SORTING ---
+            // 1. Group records by Marketplace -> Courier Partner
+            const groupedData = {};
+
+            sourceData.forEach(item => {
+                const mktp = (item.marketplace && item.marketplace.trim() !== '') ? item.marketplace.trim() : 'Others';
+                const courier = (item.courier && item.courier.trim() !== '') ? item.courier.trim() : 'Others';
+
+                if (!groupedData[mktp]) groupedData[mktp] = {};
+                if (!groupedData[mktp][courier]) groupedData[mktp][courier] = [];
+
+                groupedData[mktp][courier].push(item);
+            });
+
+            // Helper to sort keys putting "Others" last
+            const sortKeysWithOthersLast = (keys) => {
+                return keys.sort((a, b) => {
+                    if (a.toLowerCase() === 'others') return 1;
+                    if (b.toLowerCase() === 'others') return -1;
+                    return a.localeCompare(b);
+                });
+            };
+
+            const sortedMarketplaces = sortKeysWithOthersLast(Object.keys(groupedData));
+
+            // Flatten sorted structure into PDF AutoTable rows with section headers
+            const tableBody = [];
+            let globalSN = 1;
+
+            sortedMarketplaces.forEach(mktp => {
+                // Marketplace Header Row
+                const mktpTotal = Object.values(groupedData[mktp]).reduce((sum, list) => sum + list.length, 0);
+                tableBody.push([{
+                    content: `SECTION: ${mktp.toUpperCase()} (Total: ${mktpTotal})`,
+                    colSpan: 6,
+                    styles: { fillColor: [226, 232, 240], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 9.5 }
+                }]);
+
+                const sortedCouriers = sortKeysWithOthersLast(Object.keys(groupedData[mktp]));
+
+                sortedCouriers.forEach(courier => {
+                    const courierItems = groupedData[mktp][courier];
+                    // Sort items by AWB ID inside courier group
+                    courierItems.sort((a, b) => a.awb.localeCompare(b.awb));
+
+                    // Courier Sub-header Row
+                    tableBody.push([{
+                        content: `  Courier Partner: ${courier} (${courierItems.length} parcels)`,
+                        colSpan: 6,
+                        styles: { fillColor: [241, 245, 249], textColor: [51, 65, 85], fontStyle: 'bold', fontSize: 8.5 }
+                    }]);
+
+                    courierItems.forEach(item => {
+                        tableBody.push([
+                            String(globalSN++),
+                            item.awb,
+                            mktp,
+                            courier,
+                            item.timestamp,
+                            item.statusText
+                        ]);
+                    });
+                });
+            });
+
+            doc.setFontSize(11);
+            doc.setTextColor(15, 23, 42);
+            doc.text(isRtoReport ? "Categorized RTO Manifest" : "Categorized Parcel Handover Manifest", 14, startY);
+
+            const headerColor = isRtoReport ? [147, 51, 234] : navyColor;
+
+            doc.autoTable({
+                startY: startY + 4,
+                head: [['S/N', 'AWB / Tracking ID', 'Marketplace', 'Courier Partner', 'Scan Time', 'Status']],
+                body: tableBody,
+                theme: 'grid',
+                margin: { left: 14, right: 14 },
+                headStyles: { fillColor: headerColor, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+                bodyStyles: { fontSize: 8, textColor: [51, 65, 85] },
+                columnStyles: {
+                    0: { cellWidth: 10, halign: 'center' },
+                    1: { cellWidth: 42, fontStyle: 'bold' },
+                    2: { cellWidth: 33 },
+                    3: { cellWidth: 33 },
+                    4: { cellWidth: 28 },
+                    5: { cellWidth: 34 }
+                },
+                alternateRowStyles: { fillColor: [255, 255, 255] },
+                didParseCell: function(data) {
+                    if (data.section === 'body' && data.column.index === 5) {
+                        if (data.cell.raw === "UNDELIVERED (EXCLUDED)") {
+                            data.cell.styles.textColor = [217, 119, 6];
+                            data.cell.styles.fontStyle = 'bold';
+                        } else if (data.cell.raw === "FINAL DELIVERED") {
+                            data.cell.styles.textColor = [22, 163, 74];
+                            data.cell.styles.fontStyle = 'bold';
+                        } else if (data.cell.raw === "RETURNED (RTO)") {
+                            data.cell.styles.textColor = [147, 51, 234];
+                            data.cell.styles.fontStyle = 'bold';
+                        }
+                    }
+                }
+            });
+
+            // Save PDF File
+            const fileName = isRtoReport 
+                ? `ARKO_RTO_Report_${activeSessionId}.pdf` 
+                : `ARKO_Delivery_Report_${activeSessionId}.pdf`;
+            
+            doc.save(fileName);
+            setStatus(`PDF Generated successfully: ${fileName}`, "success");
+        }
+    </script>
+</body>
+</html>

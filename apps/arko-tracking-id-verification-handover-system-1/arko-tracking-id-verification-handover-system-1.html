@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARKO Tracking ID Verification System</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PDF.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- jsPDF CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0284c7',
+              600: '#0284c7',
+              700: '#0369a1',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    
+    .badge-glow { box-shadow: 0 0 15px rgba(16, 185, 129, 0.25); }
+    .badge-glow-rose { box-shadow: 0 0 15px rgba(244, 63, 94, 0.25); }
+    .badge-glow-amber { box-shadow: 0 0 15px rgba(245, 158, 11, 0.25); }
+    .badge-glow-cyan { box-shadow: 0 0 15px rgba(6, 182, 212, 0.25); }
+
+    .awb-number {
+      cursor: pointer;
+      color: #38bdf8;
+      font-weight: 600;
+      transition: opacity 0.2s;
+    }
+    .awb-number:hover { opacity: 0.75; text-decoration: underline; }
+  </style>
+</head>
+<body class="h-full font-sans antialiased bg-slate-950 text-slate-100 flex flex-col min-h-screen selection:bg-cyan-500 selection:text-black">
+
+  <!-- Initial Setup / One-Time Upload Modal -->
+  <div id="initialUploadModal" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border-2 border-cyan-500/40 max-w-xl w-full rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 text-center relative overflow-hidden">
+      <div class="absolute -right-12 -bottom-12 w-48 h-48 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+      <div class="space-y-2">
+        <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-cyan-500/20 mx-auto">
+          <i class="fa-solid fa-boxes-packing"></i>
+        </div>
+        <h2 class="text-2xl font-black text-white tracking-tight">Upload Manifest PDFs</h2>
+        <p class="text-xs text-slate-400 max-w-md mx-auto">
+          Please upload your PDF manifest file(s) or Pending list (.txt) to initialize your verification session.
+        </p>
+      </div>
+
+      <!-- Modal Drop Zone -->
+      <div id="modalDropZone" class="border-2 border-dashed border-cyan-500/50 hover:border-cyan-400 bg-slate-950/80 hover:bg-slate-950 transition-all rounded-xl p-8 text-center cursor-pointer group relative">
+        <input type="file" id="modalPdfFileInput" accept="application/pdf,.txt" multiple class="hidden" />
+        
+        <div class="space-y-3 pointer-events-none">
+          <div class="w-14 h-14 rounded-full bg-cyan-500/10 group-hover:bg-cyan-500/20 text-cyan-400 flex items-center justify-center mx-auto transition">
+            <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
+          </div>
+          <div>
+            <p class="text-sm font-bold text-slate-200 group-hover:text-cyan-300">
+              Click or Drag PDF Manifests Here
+            </p>
+            <p class="text-xs text-slate-500 mt-1">Supports multiple files (5, 10, 20+ PDFs)</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="modalLoadingState" class="hidden space-y-3 py-2">
+        <div class="flex items-center justify-center gap-2 text-cyan-400 font-mono text-sm font-semibold">
+          <i class="fa-solid fa-spinner animate-spin"></i>
+          <span id="modalLoadingText">Processing PDF Manifests...</span>
+        </div>
+        <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+          <div id="modalProgressBar" class="bg-cyan-500 h-full w-0 transition-all duration-300"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-cyan-500/20">
+          <i class="fa-solid fa-boxes-packing"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight tracking-tight text-white flex items-center gap-2">
+            ARKO Tracking ID Verification System <span class="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-xs px-2 py-0.5 rounded-md font-mono">Unified Engine</span>
+          </h1>
+          <p class="text-xs text-slate-400">Strict Parcel Verification & Courier Handover Automation</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs & Quick Actions -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <nav class="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+          <button id="navTabVerification" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-600 text-white shadow transition flex items-center gap-1.5">
+            <i class="fa-solid fa-barcode"></i>
+            <span>Verification</span>
+          </button>
+          <button id="navTabHandover" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5">
+            <i class="fa-solid fa-truck-ramp-box text-emerald-400"></i>
+            <span>Handover Courier</span>
+            <span id="handoverBadgeCount" class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold">0</span>
+          </button>
+        </nav>
+
+        <button id="btnDownloadPendingHeader" class="bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800/80 hover:border-amber-700 text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-2 shadow-sm">
+          <i class="fa-solid fa-file-pdf text-amber-400"></i>
+          <span class="hidden sm:inline">Pending PDF</span>
+        </button>
+
+        <button id="btnClearManifest" class="bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/80 hover:border-rose-700 text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-2 shadow-sm">
+          <i class="fa-solid fa-trash-can text-rose-400"></i>
+          <span class="hidden sm:inline">Reset</span>
+        </button>
+
+        <button id="btnSoundToggle" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition" title="Sound Effects Toggle">
+          <i id="soundIcon" class="fa-solid fa-volume-high text-cyan-400"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    
+    <!-- Active Manifest Banner -->
+    <section class="bg-gradient-to-r from-slate-900 via-slate-900/95 to-slate-900 border-2 border-cyan-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden">
+      <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+        
+        <div class="space-y-2 flex-1">
+          <div class="flex flex-wrap items-center gap-3">
+            <span id="activeScopeBadge" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+              AWAITING PDF MANIFEST
+            </span>
+          </div>
+
+          <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <h2 id="manifestFileName" class="text-xl sm:text-2xl font-black text-white font-mono truncate max-w-md">
+              No Manifest Loaded
+            </h2>
+            <div class="hidden text-xs text-slate-400 font-mono items-center gap-2">
+              <span>Manifest ID:</span>
+              <span id="activeManifestId" class="text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/60 font-bold">
+                N/A
+              </span>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-y-1 gap-x-6 text-xs text-slate-400 pt-1">
+            <div>
+              <i class="fa-regular fa-clock text-slate-500 mr-1.5"></i>
+              Uploaded: <span id="activeUploadTime" class="text-slate-200 font-mono">-- : -- : --</span>
+            </div>
+            <div>
+              <i class="fa-solid fa-layer-group text-slate-500 mr-1.5"></i>
+              Extracted AWB Count: <span id="activeTotalExtracted" class="text-cyan-400 font-bold font-mono text-sm">0</span>
+            </div>
+            <div>
+              <i class="fa-solid fa-file-pdf text-slate-500 mr-1.5"></i>
+              Active Files: <span id="activeFileCountBadge" class="text-slate-200 font-bold font-mono">0 Loaded</span>
+            </div>
+            <div>
+              <i class="fa-solid fa-circle-check text-slate-500 mr-1.5"></i>
+              Verification Status: <span id="activeVerificationStatusBadge" class="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-400">Idle</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metric KPI Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-max">
+          <div class="bg-slate-950/80 border border-slate-800 p-3 rounded-xl text-center min-w-[105px]">
+            <p class="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Total AWB</p>
+            <p id="kpiTotalCount" class="text-2xl font-black font-mono text-white mt-0.5">0</p>
+          </div>
+          <div class="bg-slate-950/80 border border-emerald-900/50 p-3 rounded-xl text-center min-w-[105px]">
+            <p class="text-[10px] uppercase tracking-wider font-semibold text-emerald-400">Verified</p>
+            <p id="kpiVerifiedCount" class="text-2xl font-black font-mono text-emerald-400 mt-0.5">0</p>
+          </div>
+          <div class="bg-slate-950/80 border border-amber-900/50 p-3 rounded-xl text-center min-w-[105px]">
+            <p class="text-[10px] uppercase tracking-wider font-semibold text-amber-400">Pending</p>
+            <p id="kpiPendingCount" class="text-2xl font-black font-mono text-amber-400 mt-0.5">0</p>
+          </div>
+          <div class="bg-slate-950/80 border border-rose-900/50 p-3 rounded-xl text-center min-w-[105px]">
+            <p class="text-[10px] uppercase tracking-wider font-semibold text-rose-400">Not Found</p>
+            <p id="kpiExcessCount" class="text-2xl font-black font-mono text-rose-400 mt-0.5">0</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Verification Progress Bar -->
+      <div class="mt-4 pt-4 border-t border-slate-800/80 flex items-center gap-4">
+        <div class="flex-1 bg-slate-950 rounded-full h-3 overflow-hidden p-0.5 border border-slate-800">
+          <div id="manifestProgressBar" class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full rounded-full transition-all duration-500 w-0"></div>
+        </div>
+        <span id="manifestProgressPercent" class="text-xs font-mono font-bold text-slate-300 w-12 text-right">0%</span>
+      </div>
+    </section>
+
+    <!-- VIEW VIEWPORT 1: VERIFICATION TERMINAL PAGE -->
+    <div id="viewVerificationPage" class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Upload Section (Hidden when manifest is active) -->
+        <div id="inlineUploadSection" class="lg:col-span-5 space-y-6">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+                <i class="fa-solid fa-file-arrow-up text-cyan-400"></i>
+                Upload Manifests
+              </h3>
+            </div>
+
+            <div id="dropZone" class="border-2 border-dashed border-slate-700 hover:border-cyan-500/80 bg-slate-950/60 hover:bg-slate-950 transition-all rounded-xl p-6 text-center cursor-pointer group relative">
+              <input type="file" id="pdfFileInput" accept="application/pdf,.txt" multiple class="hidden" />
+              
+              <div class="space-y-3 pointer-events-none">
+                <div class="w-12 h-12 rounded-full bg-slate-800 group-hover:bg-cyan-500/10 group-hover:text-cyan-400 text-slate-400 flex items-center justify-center mx-auto transition">
+                  <i class="fa-solid fa-cloud-arrow-up text-xl"></i>
+                </div>
+                <div>
+                  <p class="text-sm font-semibold text-slate-200 group-hover:text-cyan-300">
+                    Drop PDF Manifests or Pending TXT files here
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scanner Input Section -->
+        <div id="scannerSection" class="lg:col-span-7 space-y-6 transition-all duration-300">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+                  <i class="fa-solid fa-barcode text-cyan-400"></i>
+                  Manual / Barcode Scanner Terminal
+                </h3>
+                <p class="text-xs text-slate-400">Scan physical parcel AWB or Tracking ID barcode</p>
+              </div>
+              
+              <div>
+                <span id="scannerStatusIndicator" class="text-[11px] px-2.5 py-1 rounded-full font-semibold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> Standby
+                </span>
+              </div>
+            </div>
+
+            <!-- Barcode Input Form -->
+            <form id="scanForm" class="space-y-3" onsubmit="return false;">
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <i class="fa-solid fa-qrcode text-lg text-cyan-400"></i>
+                </div>
+                <input type="text" id="barcodeInput" 
+                  class="w-full pl-11 pr-28 py-3.5 bg-slate-950 border-2 border-slate-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 rounded-xl text-white font-mono font-bold text-lg placeholder-slate-600 transition outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="Scan AWB / Tracking ID..." 
+                  autocomplete="off" 
+                  spellcheck="false" disabled>
+                <button type="submit" id="btnSubmitScan" disabled
+                  class="absolute right-2 top-2 bottom-2 px-4 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-semibold text-xs rounded-lg transition flex items-center gap-1.5 shadow-md">
+                  <span>VERIFY</span>
+                  <i class="fa-solid fa-arrow-right"></i>
+                </button>
+              </div>
+            </form>
+
+            <!-- Scan Feed & Result Box -->
+            <div id="lastScanResultBox" class="hidden rounded-xl border p-4 transition-all duration-300">
+              <div class="flex items-start justify-between">
+                <div class="flex items-start gap-3">
+                  <div id="lastScanIcon" class="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold shrink-0">
+                    <i class="fa-solid fa-check"></i>
+                  </div>
+                  <div>
+                    <h4 id="lastScanTitle" class="font-bold text-sm tracking-wide">MATCH VERIFIED</h4>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <p id="lastScanSubtitle" class="text-xs font-mono text-slate-300">AWB: --</p>
+                    </div>
+                    <p id="lastScanTimestamp" class="text-[10px] text-slate-400 mt-1">Status details</p>
+                  </div>
+                </div>
+                <span id="lastScanBadge" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded border">
+                  STATUS
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Table Section -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        <div class="p-5 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+              <i class="fa-solid fa-list-check"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-200 text-base">
+                Extracted Manifest List (<span id="tableRecordCount">0</span>)
+              </h3>
+              <p class="text-xs text-slate-400">Strictly AWB / Tracking ID from <span id="tableManifestNameRef" class="font-mono text-cyan-400 font-semibold">No File</span></p>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="bg-slate-950 p-1 rounded-xl border border-slate-800 flex text-xs">
+              <button data-filter="all" class="filter-tab px-3 py-1.5 rounded-lg font-medium text-white bg-slate-800 shadow">All</button>
+              <button data-filter="pending" class="filter-tab px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1.5">
+                <span>Pending</span>
+                <span id="tabPendingBadge" class="bg-amber-950 text-amber-400 border border-amber-800 px-1.5 py-0.2 text-[10px] rounded-full font-mono font-bold">0</span>
+              </button>
+              <button data-filter="verified" class="filter-tab px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-slate-200">Verified</button>
+              <button data-filter="excess" class="filter-tab px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-slate-200">Not Found</button>
+            </div>
+
+            <div class="relative min-w-[180px]">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
+              <input type="text" id="tableSearchInput" placeholder="Search AWB..." 
+                class="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500">
+            </div>
+
+            <button id="btnDownloadPendingList" class="bg-amber-950/80 hover:bg-amber-900 border border-amber-800/80 hover:border-amber-700 text-amber-300 text-xs px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-file-pdf text-amber-400"></i> Download Pending (PDF)
+            </button>
+
+            <button id="btnExportPDF" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5">
+              <i class="fa-solid fa-file-pdf text-rose-400"></i> Export Report (PDF)
+            </button>
+          </div>
+        </div>
+
+        <!-- Tracking Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+                <th class="py-3 px-4 font-mono">#</th>
+                <th class="py-3 px-4">AWB / Tracking ID</th>
+                <th class="py-3 px-4">Source File</th>
+                <th class="py-3 px-4 text-center">Status</th>
+                <th class="py-3 px-4">Scan Timestamp</th>
+                <th class="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="trackingTableBody" class="divide-y divide-slate-800/60 font-mono">
+              <tr id="emptyTableState">
+                <td colspan="6" class="py-12 text-center text-slate-500 font-sans">
+                  <i class="fa-solid fa-folder-open text-3xl mb-2 text-slate-700 block"></i>
+                  <p class="font-medium text-slate-400">No active manifest loaded.</p>
+                  <p class="text-xs text-slate-600 mt-1">Upload single or multiple PDF manifests to automatically isolate AWB / Tracking IDs.</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- VIEW VIEWPORT 2: HANDOVER COURIER TAB & SETTINGS -->
+    <div id="viewHandoverPage" class="hidden space-y-6">
+      
+      <!-- Handover Action Banner & FE Selector -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left: Handover Execution Card -->
+        <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-2">
+                <i class="fa-solid fa-truck-fast"></i>
+                COURIER HANDOVER DISPATCH
+              </span>
+              <span class="text-xs font-mono text-slate-400">Receipt Auto-ID: <strong id="handoverPreviewReceiptId" class="text-cyan-400 font-bold">HND-----</strong></span>
+            </div>
+
+            <div>
+              <h3 class="text-xl font-extrabold text-white">Generate Official Handover Manifest</h3>
+              <p class="text-xs text-slate-400 mt-1">
+                Bundle all strictly verified parcels into an official handover receipt and dispatch PDF summaries to Owner, Manager, and FE via WhatsApp.
+              </p>
+            </div>
+
+            <!-- FE Selection for Current Handover -->
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                1. Select Field Executive (Pickup Person)
+              </label>
+              <div class="flex flex-col sm:flex-row gap-3">
+                <select id="selectHandoverFE" class="flex-1 bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-slate-200 font-medium outline-none">
+                  <option value="">-- Choose Field Executive --</option>
+                </select>
+                <button id="btnOpenManageFEModal" class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2">
+                  <i class="fa-solid fa-users-gear text-cyan-400"></i>
+                  <span>Manage FE Profiles</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Handover Items Summary Box -->
+            <div class="grid grid-cols-2 gap-4">
+              <div class="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl">
+                <span class="text-[11px] text-slate-400 block font-semibold">Parcels to Handover</span>
+                <span id="handoverReadyCount" class="text-2xl font-black font-mono text-emerald-400">0</span>
+                <span class="text-[10px] text-slate-500 block mt-0.5">Strictly Verified AWBs</span>
+              </div>
+              <div class="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl">
+                <span class="text-[11px] text-slate-400 block font-semibold">Recipients Configured</span>
+                <span id="handoverRecipientStatusCount" class="text-2xl font-black font-mono text-cyan-400">0 / 3</span>
+                <span class="text-[10px] text-slate-500 block mt-0.5">Owner, Manager, FE</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-6">
+            <button id="btnSubmitHandoverWorkflow" class="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-950/50 transition flex items-center justify-center gap-2">
+              <i class="fa-solid fa-paper-plane text-lg"></i>
+              <span>REVIEW & SUBMIT HANDOVER</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: WhatsApp Recipient Settings -->
+        <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+              <i class="fa-brands fa-whatsapp text-emerald-400 text-base"></i>
+              WhatsApp Recipient Settings
+            </h3>
+            <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">Persistent</span>
+          </div>
+
+          <form id="recipientSettingsForm" class="space-y-4" onsubmit="return false;">
+            <!-- Owner Contact -->
+            <div class="space-y-1">
+              <label class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <i class="fa-solid fa-user-shield text-cyan-400"></i> Owner / Admin WhatsApp
+              </label>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-slate-500 font-mono">+91</span>
+                <input type="text" id="ownerWhatsappInput" placeholder="9876543210" 
+                  class="w-full pl-12 pr-3 py-2 bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl text-xs font-mono text-slate-200 outline-none">
+              </div>
+            </div>
+
+            <!-- Manager Contact -->
+            <div class="space-y-1">
+              <label class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <i class="fa-solid fa-user-tie text-cyan-400"></i> Manager WhatsApp
+              </label>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-slate-500 font-mono">+91</span>
+                <input type="text" id="managerWhatsappInput" placeholder="9876543210" 
+                  class="w-full pl-12 pr-3 py-2 bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl text-xs font-mono text-slate-200 outline-none">
+              </div>
+            </div>
+
+            <!-- Selected FE Summary Box -->
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1">
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-slate-400 font-medium">Active Selected FE:</span>
+                <span id="activeFeNameBadge" class="font-bold text-emerald-400">None Selected</span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-slate-400 font-medium">FE WhatsApp:</span>
+                <span id="activeFePhoneBadge" class="font-mono text-slate-300">--</span>
+              </div>
+            </div>
+
+            <button type="button" id="btnSaveRecipientSettings" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
+              <i class="fa-solid fa-floppy-disk"></i>
+              <span>Save Permanent Recipient Settings</span>
+            </button>
+          </form>
+        </div>
+
+      </div>
+
+      <!-- Handover Audit History Table -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-200 text-base">Handover History Ledger</h3>
+              <p class="text-xs text-slate-400">Past generated receipts, verified parcel counts, and WhatsApp dispatch statuses</p>
+            </div>
+          </div>
+          <button id="btnClearHandoverHistory" class="text-xs text-slate-500 hover:text-rose-400 font-mono transition">
+            Clear History
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+                <th class="py-3 px-4 font-mono">Receipt #</th>
+                <th class="py-3 px-4">Date & Time</th>
+                <th class="py-3 px-4">Pickup FE</th>
+                <th class="py-3 px-4 text-center">Verified Parcels</th>
+                <th class="py-3 px-4 text-center">WhatsApp Dispatch</th>
+                <th class="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="handoverHistoryTableBody" class="divide-y divide-slate-800/60 font-mono">
+              <tr>
+                <td colspan="6" class="py-10 text-center text-slate-500 font-sans">
+                  No previous handovers submitted in this session.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Audit Log -->
+    <section class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 shadow-md">
+      <div class="flex items-center justify-between mb-3">
+        <h4 class="font-bold text-xs uppercase tracking-wider text-slate-400 flex items-center gap-2">
+          <i class="fa-solid fa-clock-rotate-left text-cyan-400"></i> Session Audit Stream
+        </h4>
+        <button id="btnClearAuditLogs" class="text-[11px] text-slate-500 hover:text-slate-300 font-mono">Clear Logs</button>
+      </div>
+      <div id="auditLogList" class="space-y-2 max-h-48 overflow-y-auto pr-2 text-xs font-mono">
+        <div class="text-slate-600 italic">No events logged in current session.</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FE MANAGEMENT MODAL -->
+  <div id="manageFeModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border-2 border-cyan-500/40 max-w-lg w-full rounded-2xl p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-slate-100 text-base flex items-center gap-2">
+          <i class="fa-solid fa-id-card text-cyan-400"></i>
+          Field Executive (FE) Directory
+        </h3>
+        <button id="btnCloseFeModal" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <!-- Add / Edit Form -->
+      <form id="feForm" class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3" onsubmit="return false;">
+        <input type="hidden" id="feEditId" value="">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-[11px] font-bold text-slate-400 uppercase">FE Full Name</label>
+            <input type="text" id="feNameInput" placeholder="e.g. Rahul Sharma" required
+              class="w-full mt-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-cyan-500">
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-slate-400 uppercase">WhatsApp Number</label>
+            <input type="text" id="fePhoneInput" placeholder="9876543210" required
+              class="w-full mt-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-mono outline-none focus:border-cyan-500">
+          </div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" id="btnCancelFeEdit" class="hidden px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-lg font-semibold">Cancel</button>
+          <button type="submit" id="btnSaveFeProfile" class="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i>
+            <span id="btnSaveFeText">Add FE Profile</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- Existing Profiles List -->
+      <div class="space-y-2">
+        <label class="text-[11px] font-bold text-slate-400 uppercase">Saved FE Profiles (<span id="feListCount">0</span>)</label>
+        <div id="feProfileContainer" class="max-h-56 overflow-y-auto space-y-2 pr-1">
+          <!-- Dynamically populated FE items -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HANDOVER CONFIRMATION MODAL -->
+  <div id="handoverConfirmModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border-2 border-emerald-500/50 max-w-lg w-full rounded-2xl p-6 shadow-2xl space-y-5 relative">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <i class="fa-solid fa-clipboard-check"></i>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-white text-base">Handover Pre-Submission Review</h3>
+            <p class="text-[11px] text-slate-400">Confirm recipients and receipt details</p>
+          </div>
+        </div>
+        <button id="btnCloseHandoverModal" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <!-- Confirmation Summary Box -->
+      <div class="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs">
+        <div class="flex justify-between border-b border-slate-800/80 pb-2">
+          <span class="text-slate-400">Receipt Reference:</span>
+          <span id="confirmReceiptNum" class="font-mono font-bold text-cyan-400">HND-----</span>
+        </div>
+        <div class="flex justify-between border-b border-slate-800/80 pb-2">
+          <span class="text-slate-400">Total Verified Parcels:</span>
+          <span id="confirmParcelCount" class="font-mono font-black text-emerald-400 text-sm">0 Parcels</span>
+        </div>
+        <div class="flex justify-between border-b border-slate-800/80 pb-2">
+          <span class="text-slate-400">Selected Pickup FE:</span>
+          <span id="confirmFeName" class="font-semibold text-slate-200">--</span>
+        </div>
+        
+        <!-- Recipient Details -->
+        <div class="pt-1 space-y-2">
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">WhatsApp Recipients:</span>
+          <div class="grid grid-cols-1 gap-1.5 pl-2 font-mono">
+            <div class="flex items-center justify-between text-slate-300">
+              <span><i class="fa-solid fa-user-shield text-cyan-400 mr-2"></i>Owner:</span>
+              <span id="confirmOwnerPhone" class="text-slate-200">--</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-300">
+              <span><i class="fa-solid fa-user-tie text-cyan-400 mr-2"></i>Manager:</span>
+              <span id="confirmManagerPhone" class="text-slate-200">--</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-300">
+              <span><i class="fa-solid fa-truck-pickup text-emerald-400 mr-2"></i>FE Pickup:</span>
+              <span id="confirmFePhone" class="text-slate-200">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button id="btnCancelHandover" class="w-full sm:w-1/3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition">
+          Cancel
+        </button>
+        <button id="btnDownloadHandoverPdfOnly" class="w-full sm:w-1/3 py-2.5 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-file-pdf"></i>
+          <span>Download PDF</span>
+        </button>
+        <button id="btnConfirmAndSubmitHandover" class="w-full sm:w-1/3 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950">
+          <i class="fa-brands fa-whatsapp text-sm"></i>
+          <span>Confirm & Send</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHATSAPP DISPATCH PROGRESS & ACTION MODAL -->
+  <div id="whatsappDispatchModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border-2 border-cyan-500/50 max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-5 text-center">
+      <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl mx-auto shadow-lg shadow-emerald-500/10">
+        <i class="fa-brands fa-whatsapp"></i>
+      </div>
+      <div>
+        <h3 class="font-extrabold text-white text-base">Handover WhatsApp Dispatch</h3>
+        <p class="text-xs text-slate-400 mt-1">Receipt generated. Dispatch handover report to recipients below:</p>
+      </div>
+
+      <!-- Recipient Cards -->
+      <div class="space-y-2.5 text-left">
+        <!-- Owner Card -->
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <span class="text-xs font-bold text-slate-200 block">Owner / Admin</span>
+            <span id="wpOwnerPhone" class="text-[11px] font-mono text-slate-400">--</span>
+          </div>
+          <button id="btnSendWpOwner" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
+            <i class="fa-brands fa-whatsapp"></i> Send
+          </button>
+        </div>
+
+        <!-- Manager Card -->
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <span class="text-xs font-bold text-slate-200 block">Manager</span>
+            <span id="wpManagerPhone" class="text-[11px] font-mono text-slate-400">--</span>
+          </div>
+          <button id="btnSendWpManager" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
+            <i class="fa-brands fa-whatsapp"></i> Send
+          </button>
+        </div>
+
+        <!-- FE Card -->
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+          <div>
+            <span id="wpFeName" class="text-xs font-bold text-slate-200 block">FE Pickup Person</span>
+            <span id="wpFePhone" class="text-[11px] font-mono text-slate-400">--</span>
+          </div>
+          <button id="btnSendWpFe" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
+            <i class="fa-brands fa-whatsapp"></i> Send
+          </button>
+        </div>
+      </div>
+
+      <p class="text-[10px] text-slate-500 bg-slate-950 p-2 rounded-lg border border-slate-800/80">
+        <i class="fa-solid fa-circle-info text-cyan-400 mr-1"></i> Note: Direct web links open WhatsApp with pre-filled details. Attach the downloaded Handover PDF to complete dispatch.
+      </p>
+
+      <button id="btnCloseWpModal" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition">
+        Done & Close
+      </button>
+    </div>
+  </div>
+
+  <!-- Notification Dialog Modal -->
+  <div id="customMsgModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border-2 border-cyan-500/50 max-w-sm w-full rounded-2xl p-6 shadow-2xl space-y-4 text-center">
+      <div id="customMsgIcon" class="w-12 h-12 rounded-full bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-xl mx-auto">
+        <i class="fa-solid fa-info"></i>
+      </div>
+      <div>
+        <h3 id="customMsgTitle" class="font-bold text-slate-100 text-base">Notification</h3>
+        <p id="customMsgBody" class="text-xs text-slate-300 mt-1">Message content</p>
+      </div>
+      <button id="btnCustomMsgOk" class="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition">
+        OK
+      </button>
+    </div>
+  </div>
+
+  <footer class="mt-auto border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-400">
+      <p>© 2026 ARKO Tracking ID Verification & Courier Handover Engine</p>
+      <div class="flex items-center gap-2 font-medium bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-slate-300">
+        <span class="text-slate-400">Developer: <strong class="text-white font-semibold">BIVAS DAS</strong></span>
+        <span class="text-slate-700">|</span>
+        <a href="https://wa.me/919733166665?text=Hi%20Bivas,%20I%20would%20like%20to%20request%20an%20update/improvement%20for%20the%20ARKO%20Tracking%20ID%20Verification%20System:" 
+           target="_blank" 
+           rel="noopener noreferrer" 
+           class="inline-flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition font-mono font-semibold">
+          <i class="fa-brands fa-whatsapp text-emerald-400 text-sm"></i>
+          <span>9733166665</span>
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const state = {
+      activeManifest: null,
+      excessList: [],
+      filter: 'all',
+      searchQuery: '',
+      soundEnabled: true,
+      recipients: {
+        owner: '',
+        manager: ''
+      },
+      feProfiles: [],
+      selectedFeId: '',
+      handoverHistory: []
+    };
+
+    const STORAGE_KEY = 'verimanifest_session_data';
+    const RECIPIENTS_KEY = 'verimanifest_recipients_data';
+    const FE_PROFILES_KEY = 'verimanifest_fe_profiles';
+    const HANDOVER_HIST_KEY = 'verimanifest_handover_history';
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let audioCtx = null;
+    let currentHandoverDraft = null;
+
+    // --- Local Storage Management ---
+    function saveSessionToStorage() {
+      if (!state.activeManifest) {
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      const dataToSave = {
+        activeManifest: {
+          id: state.activeManifest.id,
+          fileName: state.activeManifest.fileName,
+          fileList: state.activeManifest.fileList,
+          uploadedAt: state.activeManifest.uploadedAt,
+          totalExtracted: state.activeManifest.totalExtracted,
+          items: Array.from(state.activeManifest.items.entries())
+        },
+        excessList: state.excessList
+      };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave)); } catch (e) {}
+    }
+
+    function saveSettingsAndProfiles() {
+      try {
+        localStorage.setItem(RECIPIENTS_KEY, JSON.stringify(state.recipients));
+        localStorage.setItem(FE_PROFILES_KEY, JSON.stringify(state.feProfiles));
+        localStorage.setItem(HANDOVER_HIST_KEY, JSON.stringify(state.handoverHistory));
+      } catch (e) {}
+    }
+
+    function loadSessionFromStorage() {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          state.activeManifest = {
+            ...parsed.activeManifest,
+            items: new Map(parsed.activeManifest.items)
+          };
+          state.excessList = parsed.excessList || [];
+        }
+
+        const storedRecip = localStorage.getItem(RECIPIENTS_KEY);
+        if (storedRecip) state.recipients = JSON.parse(storedRecip);
+
+        const storedFe = localStorage.getItem(FE_PROFILES_KEY);
+        if (storedFe) state.feProfiles = JSON.parse(storedFe);
+
+        const storedHist = localStorage.getItem(HANDOVER_HIST_KEY);
+        if (storedHist) state.handoverHistory = JSON.parse(storedHist);
+
+        return !!state.activeManifest;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function showMessageBox(title, message) {
+      document.getElementById('customMsgTitle').textContent = title;
+      document.getElementById('customMsgBody').textContent = message;
+      document.getElementById('customMsgModal').classList.remove('hidden');
+    }
+
+    document.getElementById('btnCustomMsgOk').addEventListener('click', () => {
+      document.getElementById('customMsgModal').classList.add('hidden');
+    });
+
+    function playSound(type) {
+      if (!state.soundEnabled) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+
+        if (type === 'match') {
+          const osc1 = audioCtx.createOscillator(), osc2 = audioCtx.createOscillator(), gain = audioCtx.createGain();
+          osc1.type = 'sine'; osc2.type = 'sine';
+          osc1.frequency.setValueAtTime(880, now);
+          osc2.frequency.setValueAtTime(1318.51, now + 0.08);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+          osc1.connect(gain); osc2.connect(gain); gain.connect(audioCtx.destination);
+          osc1.start(now); osc1.stop(now + 0.08); osc2.start(now + 0.08); osc2.stop(now + 0.25);
+        } else if (type === 'duplicate') {
+          const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, now);
+          gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          osc.start(now); osc.stop(now + 0.2);
+        } else if (type === 'notfound') {
+          const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(180, now); osc.frequency.setValueAtTime(120, now + 0.12);
+          gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          osc.start(now); osc.stop(now + 0.3);
+        }
+      } catch (err) {}
+    }
+
+    function addAuditLog(msg, type = 'info') {
+      const container = document.getElementById('auditLogList');
+      if (container.children.length === 1 && container.children[0].classList.contains('italic')) {
+        container.innerHTML = '';
+      }
+      const logItem = document.createElement('div');
+      logItem.className = 'flex items-center justify-between py-1 px-2 rounded bg-slate-950/60 border border-slate-800/80 text-[11px]';
+      let icon = '<i class="fa-solid fa-circle-info text-cyan-400 mr-2"></i>';
+      if (type === 'success') icon = '<i class="fa-solid fa-circle-check text-emerald-400 mr-2"></i>';
+      if (type === 'warning') icon = '<i class="fa-solid fa-triangle-exclamation text-amber-400 mr-2"></i>';
+      if (type === 'danger') icon = '<i class="fa-solid fa-circle-xmark text-rose-400 mr-2"></i>';
+      
+      const timeStr = new Date().toLocaleTimeString();
+      logItem.innerHTML = `<div>${icon}<span class="text-slate-200">${msg}</span></div><span class="text-slate-500 font-mono text-[10px]">${timeStr}</span>`;
+      container.prepend(logItem);
+    }
+
+    document.getElementById('btnClearAuditLogs').addEventListener('click', () => {
+      document.getElementById('auditLogList').innerHTML = '<div class="text-slate-600 italic">No events logged in current session.</div>';
+    });
+
+    document.getElementById('btnSoundToggle').addEventListener('click', () => {
+      state.soundEnabled = !state.soundEnabled;
+      document.getElementById('soundIcon').className = state.soundEnabled ? 'fa-solid fa-volume-high text-cyan-400' : 'fa-solid fa-volume-xmark text-slate-500';
+    });
+
+    // Navigation Tab Switching
+    const navTabVerification = document.getElementById('navTabVerification');
+    const navTabHandover = document.getElementById('navTabHandover');
+    const viewVerificationPage = document.getElementById('viewVerificationPage');
+    const viewHandoverPage = document.getElementById('viewHandoverPage');
+
+    navTabVerification.addEventListener('click', () => {
+      navTabVerification.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-600 text-white shadow transition flex items-center gap-1.5";
+      navTabHandover.className = "px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5";
+      viewVerificationPage.classList.remove('hidden');
+      viewHandoverPage.classList.add('hidden');
+    });
+
+    navTabHandover.addEventListener('click', () => {
+      navTabHandover.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white shadow transition flex items-center gap-1.5";
+      navTabVerification.className = "px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5";
+      viewHandoverPage.classList.remove('hidden');
+      viewVerificationPage.classList.add('hidden');
+      renderHandoverView();
+    });
+
+    // --- PDF / File Parsing Logic ---
+    function extractAWBFromText(text) {
+      const lines = text.split(/\r?\n/);
+      const extractedSet = new Set();
+      lines.forEach(line => {
+        const cleaned = line.trim().toUpperCase();
+        if (cleaned && (cleaned.startsWith('SF') || /^\d{12,18}$/.test(cleaned))) {
+          if (!cleaned.startsWith('OD') && !cleaned.startsWith('00')) {
+            extractedSet.add(cleaned);
+          }
+        }
+      });
+      return Array.from(extractedSet);
+    }
+
+    async function extractAWBFromPDF(arrayBuffer) {
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const extractedSet = new Set();
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const items = textContent.items;
+
+        let targetXMin = null;
+        let targetXMax = null;
+
+        for (const item of items) {
+          const str = item.str.trim();
+          if (/^(Tracking\s*Id|AWB|AWB\s*\/\s*Tracking\s*ID)$/i.test(str)) {
+            const xPos = item.transform[4];
+            targetXMin = xPos - 35;
+            targetXMax = xPos + (item.width || 60) + 140;
+            break;
+          }
+        }
+
+        items.forEach(item => {
+          const str = item.str.trim();
+          const xPos = item.transform[4];
+
+          if (targetXMin !== null && xPos >= targetXMin && xPos <= targetXMax) {
+            if (!/Tracking|AWB|Forms|RTS|Order|Notes|S\.?\s*No|Sub|SKU|Qty|Size|Packed|Courier|Supplier|Picklist|Pending/i.test(str)) {
+              const matches = str.match(/\b(SF[A-Z0-9]{8,16}|\d{12,18})\b/gi);
+              if (matches) {
+                matches.forEach(m => {
+                  const cleaned = m.trim().toUpperCase();
+                  if (!cleaned.startsWith('OD') && !cleaned.startsWith('00')) {
+                    extractedSet.add(cleaned);
+                  }
+                });
+              }
+            }
+          }
+        });
+
+        if (extractedSet.size === 0) {
+          items.forEach(item => {
+            const str = item.str.trim();
+            const matches = str.match(/\b(SF\d{8,14}[A-Z0-9]*|14\d{13,15}|59\d{11,15})\b/gi);
+            if (matches) {
+              matches.forEach(m => extractedSet.add(m.trim().toUpperCase()));
+            }
+          });
+        }
+      }
+
+      return Array.from(extractedSet);
+    }
+
+    function processMultipleManifestsData(fileResults) {
+      const manifestId = 'MNF-' + Math.floor(1000 + Math.random() * 9000);
+      const itemsMap = new Map();
+      const fileNames = fileResults.map(f => f.fileName);
+
+      fileResults.forEach(res => {
+        res.trackingList.forEach(id => {
+          if (!itemsMap.has(id)) {
+            itemsMap.set(id, {
+              trackingId: id,
+              sourceFile: res.fileName,
+              status: 'pending',
+              scannedAt: null
+            });
+          }
+        });
+      });
+
+      const totalExtracted = itemsMap.size;
+      const combinedFileNameLabel = fileNames.length === 1 ? fileNames[0] : `${fileNames.length} PDFs Consolidated`;
+
+      state.activeManifest = {
+        id: manifestId,
+        fileName: combinedFileNameLabel,
+        fileList: fileNames,
+        uploadedAt: new Date().toLocaleTimeString(),
+        totalExtracted: totalExtracted,
+        items: itemsMap
+      };
+
+      state.excessList = [];
+      saveSessionToStorage();
+
+      document.getElementById('initialUploadModal').classList.add('hidden');
+
+      document.getElementById('manifestFileName').textContent = combinedFileNameLabel;
+      document.getElementById('activeManifestId').textContent = manifestId;
+      document.getElementById('activeUploadTime').textContent = state.activeManifest.uploadedAt;
+      document.getElementById('activeTotalExtracted').textContent = totalExtracted;
+      document.getElementById('activeFileCountBadge').textContent = `${fileNames.length} File(s) Loaded`;
+      document.getElementById('tableManifestNameRef').textContent = combinedFileNameLabel;
+
+      document.getElementById('activeScopeBadge').className = "px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 badge-glow";
+      document.getElementById('activeScopeBadge').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> MANIFEST ACTIVE`;
+
+      document.getElementById('activeVerificationStatusBadge').className = "px-2 py-0.5 rounded text-xs font-medium bg-cyan-950 text-cyan-400 border border-cyan-800";
+      document.getElementById('activeVerificationStatusBadge').textContent = "Ready for Scan";
+
+      document.getElementById('scannerStatusIndicator').className = "text-[11px] px-2.5 py-1 rounded-full font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1";
+      document.getElementById('scannerStatusIndicator').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Ready`;
+
+      document.getElementById('barcodeInput').disabled = false;
+      document.getElementById('btnSubmitScan').disabled = false;
+      document.getElementById('barcodeInput').focus();
+
+      addAuditLog(`Loaded ${fileNames.length} file(s) with ${totalExtracted} total unique AWBs extracted.`, 'success');
+      updateUI();
+    }
+
+    const modalDropZone = document.getElementById('modalDropZone');
+    const modalFileInput = document.getElementById('modalPdfFileInput');
+
+    modalDropZone.addEventListener('click', () => modalFileInput.click());
+    modalDropZone.addEventListener('dragover', (e) => { e.preventDefault(); modalDropZone.classList.add('border-cyan-400', 'bg-slate-900'); });
+    modalDropZone.addEventListener('dragleave', () => modalDropZone.classList.remove('border-cyan-400', 'bg-slate-900'));
+    modalDropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      modalDropZone.classList.remove('border-cyan-400', 'bg-slate-900');
+      if (e.dataTransfer.files.length) handleFilesSelect(e.dataTransfer.files, true);
+    });
+    modalFileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) handleFilesSelect(e.target.files, true);
+    });
+
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('pdfFileInput');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-cyan-500', 'bg-slate-900'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-cyan-500', 'bg-slate-900'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-cyan-500', 'bg-slate-900');
+      if (e.dataTransfer.files.length) handleFilesSelect(e.dataTransfer.files, false);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) handleFilesSelect(e.target.files, false);
+    });
+
+    async function handleFilesSelect(files, isModal = false) {
+      const loadingState = document.getElementById('modalLoadingState');
+      const progressBar = document.getElementById('modalProgressBar');
+      const loadingText = document.getElementById('modalLoadingText');
+
+      if (isModal) {
+        loadingState.classList.remove('hidden');
+        progressBar.style.width = '10%';
+      }
+
+      try {
+        const fileResults = [];
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (isModal) {
+            const pct = Math.round(((i + 1) / files.length) * 100);
+            progressBar.style.width = `${pct}%`;
+            loadingText.textContent = `Processing (${i + 1}/${files.length}): ${file.name}`;
+          }
+
+          let trackingIDs = [];
+          if (file.name.toLowerCase().endsWith('.txt')) {
+            const textContent = await file.text();
+            trackingIDs = extractAWBFromText(textContent);
+          } else if (file.type === 'application/pdf') {
+            const buffer = await file.arrayBuffer();
+            trackingIDs = await extractAWBFromPDF(buffer);
+          }
+
+          if (trackingIDs.length > 0) {
+            fileResults.push({
+              fileName: file.name,
+              trackingList: trackingIDs
+            });
+          }
+        }
+
+        if (fileResults.length === 0) {
+          if (isModal) loadingState.classList.add('hidden');
+          showMessageBox('Parsing Result', 'No valid AWB or Tracking IDs found in any of the uploaded files.');
+          return;
+        }
+
+        processMultipleManifestsData(fileResults);
+      } catch (err) {
+        if (isModal) loadingState.classList.add('hidden');
+        showMessageBox('Error', 'Failed to parse files: ' + err.message);
+      }
+    }
+
+    // --- Verification Scanning ---
+    function handleScanVerification(inputVal) {
+      const cleanVal = inputVal.trim().toUpperCase();
+      if (!cleanVal) return;
+
+      document.getElementById('barcodeInput').value = '';
+
+      if (!state.activeManifest) {
+        showMessageBox('No Manifest Active', 'Please upload PDF manifest(s) or Pending list before scanning.');
+        return;
+      }
+
+      const resultBox = document.getElementById('lastScanResultBox');
+      const icon = document.getElementById('lastScanIcon');
+      const title = document.getElementById('lastScanTitle');
+      const subtitle = document.getElementById('lastScanSubtitle');
+      const badge = document.getElementById('lastScanBadge');
+      const timestamp = document.getElementById('lastScanTimestamp');
+
+      resultBox.classList.remove('hidden');
+
+      if (state.activeManifest.items.has(cleanVal)) {
+        const item = state.activeManifest.items.get(cleanVal);
+        
+        if (item.status === 'verified') {
+          playSound('duplicate');
+
+          resultBox.className = "rounded-xl border border-amber-500/50 bg-amber-950/40 p-4 transition-all duration-300 badge-glow-amber";
+          icon.className = "w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold shrink-0 bg-amber-500/20 text-amber-400 border border-amber-500/40";
+          icon.innerHTML = '<i class="fa-solid fa-clone"></i>';
+
+          title.className = "font-bold text-sm tracking-wide text-amber-300";
+          title.textContent = "DUPLICATE SCAN";
+
+          subtitle.textContent = `AWB: ${cleanVal} (${item.sourceFile})`;
+          timestamp.textContent = `Already verified previously at ${item.scannedAt}`;
+
+          badge.className = "text-[10px] font-mono font-bold px-2 py-0.5 rounded border bg-amber-500/20 text-amber-300 border-amber-500/40";
+          badge.textContent = "DUPLICATE";
+
+          addAuditLog(`Duplicate scan ignored: ${cleanVal}`, 'warning');
+        } else {
+          item.status = 'verified';
+          item.scannedAt = new Date().toLocaleTimeString();
+
+          playSound('match');
+
+          resultBox.className = "rounded-xl border border-emerald-500/50 bg-emerald-950/40 p-4 transition-all duration-300 badge-glow";
+          icon.className = "w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold shrink-0 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40";
+          icon.innerHTML = '<i class="fa-solid fa-check"></i>';
+
+          title.className = "font-bold text-sm tracking-wide text-emerald-300";
+          title.textContent = "MATCH VERIFIED";
+
+          subtitle.textContent = `AWB: ${cleanVal} | Source: ${item.sourceFile}`;
+          timestamp.textContent = `Scanned & Matched at ${item.scannedAt}`;
+
+          badge.className = "text-[10px] font-mono font-bold px-2 py-0.5 rounded border bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
+          badge.textContent = "VERIFIED";
+
+          addAuditLog(`Verified AWB: ${cleanVal} [File: ${item.sourceFile}]`, 'success');
+        }
+      } else {
+        playSound('notfound');
+
+        if (!state.excessList.some(e => e.trackingId === cleanVal)) {
+          state.excessList.push({
+            trackingId: cleanVal,
+            scannedAt: new Date().toLocaleTimeString()
+          });
+        }
+
+        resultBox.className = "rounded-xl border border-rose-500/50 bg-rose-950/40 p-4 transition-all duration-300 badge-glow-rose";
+        icon.className = "w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold shrink-0 bg-rose-500/20 text-rose-400 border border-rose-500/40";
+        icon.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+
+        title.className = "font-bold text-sm tracking-wide text-rose-300";
+        title.textContent = "NOT FOUND IN MANIFEST";
+
+        subtitle.textContent = `AWB / Tracking ID: ${cleanVal}`;
+        timestamp.textContent = `Flagged as unmanifested at ${new Date().toLocaleTimeString()}`;
+
+        badge.className = "text-[10px] font-mono font-bold px-2 py-0.5 rounded border bg-rose-500/20 text-rose-300 border-rose-500/40";
+        badge.textContent = "NOT FOUND";
+
+        addAuditLog(`Unmanifested AWB scanned: ${cleanVal}`, 'danger');
+      }
+
+      saveSessionToStorage();
+      updateUI();
+    }
+
+    document.getElementById('scanForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      handleScanVerification(document.getElementById('barcodeInput').value);
+    });
+
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        const tabBtn = e.currentTarget;
+        document.querySelectorAll('.filter-tab').forEach(t => {
+          t.className = "filter-tab px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1.5";
+        });
+        tabBtn.className = "filter-tab px-3 py-1.5 rounded-lg font-medium text-white bg-slate-800 shadow flex items-center gap-1.5";
+        state.filter = tabBtn.getAttribute('data-filter');
+        renderTable();
+      });
+    });
+
+    document.getElementById('tableSearchInput').addEventListener('input', (e) => {
+      state.searchQuery = e.target.value.trim().toUpperCase();
+      renderTable();
+    });
+
+    function downloadPendingTrackingIDs() {
+      if (!state.activeManifest) {
+        showMessageBox('Download Alert', 'No active manifest loaded.');
+        return;
+      }
+
+      const pendingItems = Array.from(state.activeManifest.items.values())
+        .filter(i => i.status === 'pending');
+
+      if (pendingItems.length === 0) {
+        showMessageBox('Pending List', 'There are no pending Tracking IDs remaining in the current session.');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text("Pending Tracking ID Report", 14, 20);
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Manifest Session ID: ${state.activeManifest.id}`, 14, 28);
+      doc.text(`Generated Date: ${new Date().toLocaleString()}`, 14, 34);
+      doc.text(`Total Pending AWBs: ${pendingItems.length}`, 14, 40);
+
+      doc.setFillColor(15, 23, 42);
+      doc.rect(14, 46, 180, 8, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.text("S.No.", 18, 51);
+      doc.text("AWB / Tracking ID", 45, 51);
+      doc.text("Source File", 125, 51);
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+
+      let y = 60;
+      pendingItems.forEach((item, index) => {
+        if (y > 280) {
+          doc.addPage();
+          doc.setFillColor(15, 23, 42);
+          doc.rect(14, 15, 180, 8, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFont("helvetica", "bold");
+          doc.text("S.No.", 18, 20);
+          doc.text("AWB / Tracking ID", 45, 20);
+          doc.text("Source File", 125, 20);
+          doc.setTextColor(0, 0, 0);
+          doc.setFont("helvetica", "normal");
+          y = 29;
+        }
+
+        doc.text(String(index + 1), 18, y);
+        doc.text(item.trackingId, 45, y);
+        doc.text(item.sourceFile.substring(0, 30), 125, y);
+        y += 7;
+      });
+
+      doc.save(`Pending_AWB_${state.activeManifest.id}.pdf`);
+      addAuditLog(`Downloaded Pending PDF with ${pendingItems.length} AWB / Tracking IDs.`, 'info');
+    }
+
+    document.getElementById('btnDownloadPendingList').addEventListener('click', downloadPendingTrackingIDs);
+    document.getElementById('btnDownloadPendingHeader').addEventListener('click', downloadPendingTrackingIDs);
+
+    // --- RECIPIENT SETTINGS & FE DIRECTORY MANAGEMENT ---
+    document.getElementById('btnSaveRecipientSettings').addEventListener('click', () => {
+      const ownerVal = document.getElementById('ownerWhatsappInput').value.trim();
+      const managerVal = document.getElementById('managerWhatsappInput').value.trim();
+
+      state.recipients.owner = ownerVal;
+      state.recipients.manager = managerVal;
+      saveSettingsAndProfiles();
+
+      addAuditLog("Recipient WhatsApp contact settings updated persistently.", 'success');
+      showMessageBox('Settings Saved', 'Owner and Manager WhatsApp numbers saved successfully.');
+      renderHandoverView();
+    });
+
+    const manageFeModal = document.getElementById('manageFeModal');
+    document.getElementById('btnOpenManageFEModal').addEventListener('click', () => {
+      manageFeModal.classList.remove('hidden');
+      renderFeListInModal();
+    });
+
+    document.getElementById('btnCloseFeModal').addEventListener('click', () => {
+      manageFeModal.classList.add('hidden');
+    });
+
+    function renderFeDropdown() {
+      const select = document.getElementById('selectHandoverFE');
+      select.innerHTML = '<option value="">-- Choose Field Executive --</option>';
+
+      state.feProfiles.forEach(fe => {
+        const opt = document.createElement('option');
+        opt.value = fe.id;
+        opt.textContent = `${fe.name} (+91 ${fe.phone})`;
+        if (state.selectedFeId === fe.id) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+
+    document.getElementById('selectHandoverFE').addEventListener('change', (e) => {
+      state.selectedFeId = e.target.value;
+      renderHandoverView();
+    });
+
+    function renderFeListInModal() {
+      const container = document.getElementById('feProfileContainer');
+      document.getElementById('feListCount').textContent = state.feProfiles.length;
+      container.innerHTML = '';
+
+      if (state.feProfiles.length === 0) {
+        container.innerHTML = '<div class="text-xs text-slate-500 italic p-3 text-center">No FE Profiles added yet. Add below.</div>';
+        return;
+      }
+
+      state.feProfiles.forEach(fe => {
+        const div = document.createElement('div');
+        div.className = "bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs";
+        div.innerHTML = `
+          <div>
+            <span class="font-bold text-slate-200 block">${fe.name}</span>
+            <span class="font-mono text-slate-400 text-[11px]">+91 ${fe.phone}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="editFeProfile('${fe.id}')" class="p-1.5 text-cyan-400 hover:bg-slate-800 rounded" title="Edit FE"><i class="fa-solid fa-pen-to-square"></i></button>
+            <button onclick="deleteFeProfile('${fe.id}')" class="p-1.5 text-rose-400 hover:bg-slate-800 rounded" title="Delete FE"><i class="fa-solid fa-trash-can"></i></button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    document.getElementById('feForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const editId = document.getElementById('feEditId').value;
+      const name = document.getElementById('feNameInput').value.trim();
+      const phone = document.getElementById('fePhoneInput').value.trim();
+
+      if (!name || !phone) return;
+
+      if (editId) {
+        const fe = state.feProfiles.find(f => f.id === editId);
+        if (fe) {
+          fe.name = name;
+          fe.phone = phone;
+        }
+      } else {
+        const newFe = {
+          id: 'FE-' + Date.now().toString().slice(-5),
+          name: name,
+          phone: phone
+        };
+        state.feProfiles.push(newFe);
+      }
+
+      document.getElementById('feEditId').value = '';
+      document.getElementById('feNameInput').value = '';
+      document.getElementById('fePhoneInput').value = '';
+      document.getElementById('btnCancelFeEdit').classList.add('hidden');
+      document.getElementById('btnSaveFeText').textContent = 'Add FE Profile';
+
+      saveSettingsAndProfiles();
+      renderFeListInModal();
+      renderFeDropdown();
+      renderHandoverView();
+    });
+
+    window.editFeProfile = function(id) {
+      const fe = state.feProfiles.find(f => f.id === id);
+      if (!fe) return;
+      document.getElementById('feEditId').value = fe.id;
+      document.getElementById('feNameInput').value = fe.name;
+      document.getElementById('fePhoneInput').value = fe.phone;
+      document.getElementById('btnCancelFeEdit').classList.remove('hidden');
+      document.getElementById('btnSaveFeText').textContent = 'Update FE';
+    };
+
+    document.getElementById('btnCancelFeEdit').addEventListener('click', () => {
+      document.getElementById('feEditId').value = '';
+      document.getElementById('feNameInput').value = '';
+      document.getElementById('fePhoneInput').value = '';
+      document.getElementById('btnCancelFeEdit').classList.add('hidden');
+      document.getElementById('btnSaveFeText').textContent = 'Add FE Profile';
+    });
+
+    window.deleteFeProfile = function(id) {
+      state.feProfiles = state.feProfiles.filter(f => f.id !== id);
+      if (state.selectedFeId === id) state.selectedFeId = '';
+      saveSettingsAndProfiles();
+      renderFeListInModal();
+      renderFeDropdown();
+      renderHandoverView();
+    };
+
+    // --- HANDOVER WORKFLOW & PDF GENERATOR ---
+    function renderHandoverView() {
+      document.getElementById('ownerWhatsappInput').value = state.recipients.owner || '';
+      document.getElementById('managerWhatsappInput').value = state.recipients.manager || '';
+
+      renderFeDropdown();
+
+      const selectedFe = state.feProfiles.find(f => f.id === state.selectedFeId);
+      if (selectedFe) {
+        document.getElementById('activeFeNameBadge').textContent = selectedFe.name;
+        document.getElementById('activeFePhoneBadge').textContent = `+91 ${selectedFe.phone}`;
+      } else {
+        document.getElementById('activeFeNameBadge').textContent = "None Selected";
+        document.getElementById('activeFePhoneBadge').textContent = "--";
+      }
+
+      const verifiedCount = state.activeManifest
+        ? Array.from(state.activeManifest.items.values()).filter(i => i.status === 'verified').length
+        : 0;
+
+      document.getElementById('handoverReadyCount').textContent = verifiedCount;
+      document.getElementById('handoverBadgeCount').textContent = verifiedCount;
+
+      let recipCount = 0;
+      if (state.recipients.owner) recipCount++;
+      if (state.recipients.manager) recipCount++;
+      if (selectedFe && selectedFe.phone) recipCount++;
+      document.getElementById('handoverRecipientStatusCount').textContent = `${recipCount} / 3`;
+
+      renderHandoverHistoryTable();
+    }
+
+    // Handover Submission Review Modal Trigger
+    document.getElementById('btnSubmitHandoverWorkflow').addEventListener('click', () => {
+      if (!state.activeManifest) {
+        showMessageBox('Handover Error', 'No active manifest session available.');
+        return;
+      }
+
+      const verifiedItems = Array.from(state.activeManifest.items.values()).filter(i => i.status === 'verified');
+      if (verifiedItems.length === 0) {
+        showMessageBox('Handover Error', 'There are NO verified parcels available for handover. Please scan and verify parcels first.');
+        return;
+      }
+
+      const selectedFe = state.feProfiles.find(f => f.id === state.selectedFeId);
+      if (!selectedFe) {
+        showMessageBox('Handover Alert', 'Please select the Pickup Field Executive (FE) collecting the parcels.');
+        return;
+      }
+
+      const receiptId = 'HND-' + Math.floor(100000 + Math.random() * 900000);
+      currentHandoverDraft = {
+        receiptId: receiptId,
+        timestamp: new Date().toLocaleString(),
+        verifiedItems: verifiedItems,
+        fe: selectedFe,
+        ownerPhone: state.recipients.owner || 'Not Set',
+        managerPhone: state.recipients.manager || 'Not Set'
+      };
+
+      document.getElementById('confirmReceiptNum').textContent = receiptId;
+      document.getElementById('confirmParcelCount').textContent = `${verifiedItems.length} Verified Parcels`;
+      document.getElementById('confirmFeName').textContent = selectedFe.name;
+      document.getElementById('confirmOwnerPhone').textContent = state.recipients.owner ? `+91 ${state.recipients.owner}` : 'Not Provided';
+      document.getElementById('confirmManagerPhone').textContent = state.recipients.manager ? `+91 ${state.recipients.manager}` : 'Not Provided';
+      document.getElementById('confirmFePhone').textContent = `+91 ${selectedFe.phone}`;
+
+      document.getElementById('handoverConfirmModal').classList.remove('hidden');
+    });
+
+    document.getElementById('btnCancelHandover').addEventListener('click', () => {
+      document.getElementById('handoverConfirmModal').classList.add('hidden');
+    });
+    document.getElementById('btnCloseHandoverModal').addEventListener('click', () => {
+      document.getElementById('handoverConfirmModal').classList.add('hidden');
+    });
+
+    // Helper: Generate Official Handover PDF
+    function generateHandoverPDFDoc(draft) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      // Brand Header Banner
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, 210, 35, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.text("ARKO PARCEL HANDOVER RECEIPT", 14, 20);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(56, 189, 248); // cyan-400
+      doc.text("Official Courier Pickup Verification Document", 14, 27);
+
+      // Receipt Metadata Box
+      doc.setDrawColor(226, 232, 240);
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(14, 42, 182, 34, 3, 3, 'FD');
+
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Handover Receipt #: ${draft.receiptId}`, 20, 52);
+      doc.text(`Total Verified Parcels: ${draft.verifiedItems.length} Units`, 120, 52);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`Date & Time: ${draft.timestamp}`, 20, 60);
+      doc.text(`Pickup FE Name: ${draft.fe.name}`, 120, 60);
+
+      doc.text(`Session Manifest: ${state.activeManifest.fileName}`, 20, 68);
+      doc.text(`FE Contact: +91 ${draft.fe.phone}`, 120, 68);
+
+      // Table Headers
+      doc.setFillColor(2, 132, 199); // brand cyan
+      doc.rect(14, 82, 182, 8, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text("S.No.", 20, 87);
+      doc.text("AWB / Tracking ID", 50, 87);
+      doc.text("Source Manifest PDF", 125, 87);
+
+      doc.setTextColor(30, 41, 59);
+      doc.setFont("helvetica", "normal");
+
+      let y = 96;
+      draft.verifiedItems.forEach((item, idx) => {
+        if (y > 275) {
+          doc.addPage();
+          doc.setFillColor(2, 132, 199);
+          doc.rect(14, 15, 182, 8, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFont("helvetica", "bold");
+          doc.text("S.No.", 20, 20);
+          doc.text("AWB / Tracking ID", 50, 20);
+          doc.text("Source Manifest PDF", 125, 20);
+          doc.setTextColor(30, 41, 59);
+          doc.setFont("helvetica", "normal");
+          y = 29;
+        }
+
+        doc.text(String(idx + 1), 20, y);
+        doc.setFont("helvetica", "bold");
+        doc.text(item.trackingId, 50, y);
+        doc.setFont("helvetica", "normal");
+        doc.text(item.sourceFile.substring(0, 32), 125, y);
+        
+        doc.setDrawColor(241, 245, 249);
+        doc.line(14, y + 2, 196, y + 2);
+        y += 7;
+      });
+
+      return doc;
+    }
+
+    document.getElementById('btnDownloadHandoverPdfOnly').addEventListener('click', () => {
+      if (!currentHandoverDraft) return;
+      const doc = generateHandoverPDFDoc(currentHandoverDraft);
+      doc.save(`Handover_Receipt_${currentHandoverDraft.receiptId}.pdf`);
+      addAuditLog(`Downloaded PDF Handover Receipt #${currentHandoverDraft.receiptId}`, 'info');
+    });
+
+    // Confirm Submission & Trigger WhatsApp Sharing Modal
+    document.getElementById('btnConfirmAndSubmitHandover').addEventListener('click', () => {
+      if (!currentHandoverDraft) return;
+
+      const doc = generateHandoverPDFDoc(currentHandoverDraft);
+      doc.save(`Handover_Receipt_${currentHandoverDraft.receiptId}.pdf`);
+
+      const newHistoryRecord = {
+        receiptId: currentHandoverDraft.receiptId,
+        timestamp: currentHandoverDraft.timestamp,
+        feName: currentHandoverDraft.fe.name,
+        fePhone: currentHandoverDraft.fe.phone,
+        totalParcels: currentHandoverDraft.verifiedItems.length,
+        ownerPhone: currentHandoverDraft.ownerPhone,
+        managerPhone: currentHandoverDraft.managerPhone,
+        items: currentHandoverDraft.verifiedItems.map(i => i.trackingId)
+      };
+
+      state.handoverHistory.unshift(newHistoryRecord);
+      saveSettingsAndProfiles();
+
+      document.getElementById('handoverConfirmModal').classList.add('hidden');
+      
+      // Open WhatsApp Dispatch Control Center
+      document.getElementById('wpOwnerPhone').textContent = currentHandoverDraft.ownerPhone !== 'Not Set' ? `+91 ${currentHandoverDraft.ownerPhone}` : 'Not Configured';
+      document.getElementById('wpManagerPhone').textContent = currentHandoverDraft.managerPhone !== 'Not Set' ? `+91 ${currentHandoverDraft.managerPhone}` : 'Not Configured';
+      document.getElementById('wpFeName').textContent = `FE: ${currentHandoverDraft.fe.name}`;
+      document.getElementById('wpFePhone').textContent = `+91 ${currentHandoverDraft.fe.phone}`;
+
+      const wpModal = document.getElementById('whatsappDispatchModal');
+      wpModal.classList.remove('hidden');
+
+      addAuditLog(`Handover #${currentHandoverDraft.receiptId} submitted with ${currentHandoverDraft.verifiedItems.length} parcels.`, 'success');
+      renderHandoverView();
+    });
+
+    // Helper: Trigger WhatsApp Click-to-Chat Link
+    function openWhatsappMessage(phone, draft) {
+      if (!phone || phone === 'Not Set' || phone === 'Not Provided') {
+        showMessageBox('WhatsApp Error', 'Phone number is not configured.');
+        return;
+      }
+
+      const cleanPhone = phone.replace(/\D/g, '');
+      const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
+      const message = `*ARKO PARCEL HANDOVER RECEIPT*\n` +
+        `----------------------------------------\n` +
+        `*Receipt #:* ${draft.receiptId}\n` +
+        `*Date/Time:* ${draft.timestamp}\n` +
+        `*Pickup FE:* ${draft.fe.name} (${draft.fe.phone})\n` +
+        `*Verified Parcels:* ${draft.verifiedItems.length} Units\n` +
+        `----------------------------------------\n` +
+        `_Note: Official PDF Handover Receipt has been downloaded. Please attach the file to send._`;
+
+      const encodedMsg = encodeURIComponent(message);
+      window.open(`https://wa.me/${fullPhone}?text=${encodedMsg}`, '_blank');
+    }
+
+    document.getElementById('btnSendWpOwner').addEventListener('click', () => {
+      if (currentHandoverDraft) openWhatsappMessage(currentHandoverDraft.ownerPhone, currentHandoverDraft);
+    });
+
+    document.getElementById('btnSendWpManager').addEventListener('click', () => {
+      if (currentHandoverDraft) openWhatsappMessage(currentHandoverDraft.managerPhone, currentHandoverDraft);
+    });
+
+    document.getElementById('btnSendWpFe').addEventListener('click', () => {
+      if (currentHandoverDraft) openWhatsappMessage(currentHandoverDraft.fe.phone, currentHandoverDraft);
+    });
+
+    document.getElementById('btnCloseWpModal').addEventListener('click', () => {
+      document.getElementById('whatsappDispatchModal').classList.add('hidden');
+    });
+
+    // Render Handover Ledger Table
+    function renderHandoverHistoryTable() {
+      const tbody = document.getElementById('handoverHistoryTableBody');
+      tbody.innerHTML = '';
+
+      if (state.handoverHistory.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-10 text-center text-slate-500 font-sans">
+              No previous handovers submitted in this session.
+            </td>
+          </tr>`;
+        return;
+      }
+
+      state.handoverHistory.forEach(rec => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-800/40 transition border-b border-slate-800/40";
+        tr.innerHTML = `
+          <td class="py-3 px-4 font-bold text-cyan-400">${rec.receiptId}</td>
+          <td class="py-3 px-4 text-slate-400">${rec.timestamp}</td>
+          <td class="py-3 px-4 font-sans text-slate-200">${rec.feName} <span class="text-[10px] text-slate-500 font-mono block">+91 ${rec.fePhone}</span></td>
+          <td class="py-3 px-4 text-center font-bold text-emerald-400">${rec.totalParcels} AWBs</td>
+          <td class="py-3 px-4 text-center">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">DISPATCHED</span>
+          </td>
+          <td class="py-3 px-4 text-right">
+            <button onclick="reopenWpDispatchModal('${rec.receiptId}')" class="text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded transition font-sans">
+              <i class="fa-brands fa-whatsapp text-emerald-400 mr-1"></i> Re-Share
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    window.reopenWpDispatchModal = function(receiptId) {
+      const rec = state.handoverHistory.find(h => h.receiptId === receiptId);
+      if (!rec) return;
+
+      currentHandoverDraft = {
+        receiptId: rec.receiptId,
+        timestamp: rec.timestamp,
+        verifiedItems: rec.items.map(id => ({ trackingId: id, sourceFile: 'Handover Record' })),
+        fe: { name: rec.feName, phone: rec.fePhone },
+        ownerPhone: rec.ownerPhone,
+        managerPhone: rec.managerPhone
+      };
+
+      document.getElementById('wpOwnerPhone').textContent = rec.ownerPhone !== 'Not Set' ? `+91 ${rec.ownerPhone}` : 'Not Configured';
+      document.getElementById('wpManagerPhone').textContent = rec.managerPhone !== 'Not Set' ? `+91 ${rec.managerPhone}` : 'Not Configured';
+      document.getElementById('wpFeName').textContent = `FE: ${rec.feName}`;
+      document.getElementById('wpFePhone').textContent = `+91 ${rec.fePhone}`;
+
+      document.getElementById('whatsappDispatchModal').classList.remove('hidden');
+    };
+
+    document.getElementById('btnClearHandoverHistory').addEventListener('click', () => {
+      state.handoverHistory = [];
+      saveSettingsAndProfiles();
+      renderHandoverHistoryTable();
+      addAuditLog("Cleared handover history ledger.", 'info');
+    });
+
+    // --- UI Update Pipeline ---
+    function updateUI() {
+      const inlineUploadSection = document.getElementById('inlineUploadSection');
+      const scannerSection = document.getElementById('scannerSection');
+
+      if (!state.activeManifest) {
+        document.getElementById('initialUploadModal').classList.remove('hidden');
+        if (inlineUploadSection) inlineUploadSection.classList.remove('hidden');
+        if (scannerSection) scannerSection.className = "lg:col-span-7 space-y-6 transition-all duration-300";
+
+        document.getElementById('kpiTotalCount').textContent = "0";
+        document.getElementById('kpiVerifiedCount').textContent = "0";
+        document.getElementById('kpiPendingCount').textContent = "0";
+        document.getElementById('kpiExcessCount').textContent = "0";
+        document.getElementById('tabPendingBadge').textContent = "0";
+        document.getElementById('activeFileCountBadge').textContent = "0 Loaded";
+        document.getElementById('manifestProgressBar').style.width = "0%";
+        document.getElementById('manifestProgressPercent').textContent = "0%";
+        renderTable();
+        renderHandoverView();
+        return;
+      }
+
+      document.getElementById('initialUploadModal').classList.add('hidden');
+      if (inlineUploadSection) inlineUploadSection.classList.add('hidden');
+      if (scannerSection) scannerSection.className = "lg:col-span-12 space-y-6 transition-all duration-300";
+
+      const items = Array.from(state.activeManifest.items.values());
+      const total = items.length;
+      const verified = items.filter(i => i.status === 'verified').length;
+      const pending = total - verified;
+      const excess = state.excessList.length;
+
+      document.getElementById('kpiTotalCount').textContent = total;
+      document.getElementById('kpiVerifiedCount').textContent = verified;
+      document.getElementById('kpiPendingCount').textContent = pending;
+      document.getElementById('kpiExcessCount').textContent = excess;
+      document.getElementById('tabPendingBadge').textContent = pending;
+
+      const pct = total > 0 ? Math.round((verified / total) * 100) : 0;
+      document.getElementById('manifestProgressBar').style.width = `${pct}%`;
+      document.getElementById('manifestProgressPercent').textContent = `${pct}%`;
+
+      if (pct === 100 && total > 0) {
+        document.getElementById('activeVerificationStatusBadge').className = "px-2 py-0.5 rounded text-xs font-bold bg-emerald-950 text-emerald-400 border border-emerald-700";
+        document.getElementById('activeVerificationStatusBadge').textContent = "Complete ✓ (100%)";
+      } else {
+        document.getElementById('activeVerificationStatusBadge').className = "px-2 py-0.5 rounded text-xs font-medium bg-cyan-950 text-cyan-400 border border-cyan-800";
+        document.getElementById('activeVerificationStatusBadge').textContent = `In Progress (${verified}/${total})`;
+      }
+
+      renderTable();
+      renderHandoverView();
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('trackingTableBody');
+      tbody.innerHTML = '';
+
+      if (!state.activeManifest) {
+        tbody.innerHTML = `
+          <tr id="emptyTableState">
+            <td colspan="6" class="py-12 text-center text-slate-500 font-sans">
+              <i class="fa-solid fa-folder-open text-3xl mb-2 text-slate-700 block"></i>
+              <p class="font-medium text-slate-400">No active manifest loaded.</p>
+              <p class="text-xs text-slate-600 mt-1">Upload single or multiple PDF manifests to isolate AWB / Tracking IDs.</p>
+            </td>
+          </tr>`;
+        document.getElementById('tableRecordCount').textContent = "0";
+        return;
+      }
+
+      let records = [];
+
+      if (state.filter === 'all' || state.filter === 'pending' || state.filter === 'verified') {
+        const items = Array.from(state.activeManifest.items.values());
+        records = items.map(item => ({
+          trackingId: item.trackingId,
+          sourceFile: item.sourceFile,
+          status: item.status,
+          scannedAt: item.scannedAt || '--',
+          isExcess: false
+        }));
+      }
+
+      if (state.filter === 'excess') {
+        records = state.excessList.map(item => ({
+          trackingId: item.trackingId,
+          sourceFile: 'Unmanifested',
+          status: 'excess',
+          scannedAt: item.scannedAt,
+          isExcess: true
+        }));
+      } else if (state.filter === 'all') {
+        const excessRecords = state.excessList.map(item => ({
+          trackingId: item.trackingId,
+          sourceFile: 'Unmanifested',
+          status: 'excess',
+          scannedAt: item.scannedAt,
+          isExcess: true
+        }));
+        records = records.concat(excessRecords);
+      }
+
+      if (state.filter === 'pending') records = records.filter(r => r.status === 'pending');
+      if (state.filter === 'verified') records = records.filter(r => r.status === 'verified');
+
+      if (state.searchQuery) {
+        records = records.filter(r => r.trackingId.includes(state.searchQuery) || r.sourceFile.toUpperCase().includes(state.searchQuery));
+      }
+
+      document.getElementById('tableRecordCount').textContent = records.length;
+
+      if (records.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-8 text-center text-slate-500 font-sans">
+              No records match the active filter criteria.
+            </td>
+          </tr>`;
+        return;
+      }
+
+      records.forEach((row, idx) => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-800/40 transition border-b border-slate-800/40";
+
+        let statusBadge = '';
+        if (row.status === 'verified') {
+          statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800/80">VERIFIED</span>`;
+        } else if (row.status === 'pending') {
+          statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800/80">PENDING</span>`;
+        } else {
+          statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-400 border border-rose-800/80">NOT FOUND</span>`;
+        }
+
+        let actionBtn = row.status === 'pending'
+          ? `<button onclick="handleScanVerification('${row.trackingId}')" class="text-[11px] px-2.5 py-1 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded transition font-sans">Verify</button>`
+          : `<span class="text-slate-600 font-sans text-[11px]">Logged</span>`;
+
+        tr.innerHTML = `
+          <td class="py-3 px-4 text-slate-500">${idx + 1}</td>
+          <td class="py-3 px-4">
+            <span class="awb-number font-bold">${row.trackingId}</span>
+          </td>
+          <td class="py-3 px-4 text-slate-400 font-sans truncate max-w-[150px]" title="${row.sourceFile}">${row.sourceFile}</td>
+          <td class="py-3 px-4 text-center">${statusBadge}</td>
+          <td class="py-3 px-4 text-slate-400">${row.scannedAt}</td>
+          <td class="py-3 px-4 text-right">${actionBtn}</td>
+        `;
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Export PDF Audit Report
+    document.getElementById('btnExportPDF').addEventListener('click', () => {
+      if (!state.activeManifest) {
+        showMessageBox('Export Alert', 'No active manifest to export.');
+        return;
+      }
+
+      const verifiedItems = Array.from(state.activeManifest.items.values()).filter(i => i.status === 'verified');
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      doc.setFontSize(16);
+      doc.text("AWB UNIFIED MANIFEST AUDIT REPORT", 14, 20);
+
+      doc.setFontSize(10);
+      doc.text(`Manifest Session ID: ${state.activeManifest.id}`, 14, 28);
+      doc.text(`Files Consolidated: ${state.activeManifest.fileName}`, 14, 34);
+      doc.text(`Date: ${new Date().toLocaleString()}`, 14, 40);
+      doc.text(`Verified Count: ${verifiedItems.length} / ${state.activeManifest.totalExtracted}`, 14, 46);
+
+      doc.setFillColor(15, 23, 42);
+      doc.rect(14, 52, 180, 8, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.text("#", 18, 57);
+      doc.text("AWB / Tracking ID", 38, 57);
+      doc.text("Source File", 100, 57);
+      doc.text("Scan Timestamp", 155, 57);
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+
+      let y = 66;
+      verifiedItems.forEach((item, index) => {
+        if (y > 280) { doc.addPage(); y = 20; }
+        doc.text(String(index + 1), 18, y);
+        doc.text(item.trackingId, 38, y);
+        doc.text(item.sourceFile.substring(0, 22), 100, y);
+        doc.text(item.scannedAt || 'N/A', 155, y);
+        y += 7;
+      });
+
+      doc.save(`AWB_Audit_${state.activeManifest.id}.pdf`);
+    });
+
+    // Reset Session
+    document.getElementById('btnClearManifest').addEventListener('click', () => {
+      state.activeManifest = null;
+      state.excessList = [];
+      saveSessionToStorage();
+
+      document.getElementById('manifestFileName').textContent = "No Manifest Loaded";
+      document.getElementById('activeManifestId').textContent = "N/A";
+      document.getElementById('activeUploadTime').textContent = "-- : -- : --";
+      document.getElementById('activeTotalExtracted').textContent = "0";
+      document.getElementById('activeFileCountBadge').textContent = "0 Loaded";
+      document.getElementById('tableManifestNameRef').textContent = "No File";
+
+      document.getElementById('activeScopeBadge').className = "px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5";
+      document.getElementById('activeScopeBadge').innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-500"></span> AWAITING PDF MANIFEST`;
+
+      document.getElementById('barcodeInput').disabled = true;
+      document.getElementById('btnSubmitScan').disabled = true;
+      document.getElementById('lastScanResultBox').classList.add('hidden');
+
+      document.getElementById('modalLoadingState').classList.add('hidden');
+      document.getElementById('modalProgressBar').style.width = '0%';
+      document.getElementById('modalPdfFileInput').value = '';
+
+      addAuditLog("Session reset. Awaiting initial upload.", 'warning');
+      updateUI();
+    });
+
+    // On Load Initialization
+    window.addEventListener('DOMContentLoaded', () => {
+      const hasSession = loadSessionFromStorage();
+      if (hasSession && state.activeManifest) {
+        document.getElementById('initialUploadModal').classList.add('hidden');
+        document.getElementById('manifestFileName').textContent = state.activeManifest.fileName;
+        document.getElementById('activeManifestId').textContent = state.activeManifest.id;
+        document.getElementById('activeUploadTime').textContent = state.activeManifest.uploadedAt;
+        document.getElementById('activeTotalExtracted').textContent = state.activeManifest.totalExtracted;
+        document.getElementById('activeFileCountBadge').textContent = `${state.activeManifest.fileList.length} File(s) Loaded`;
+        document.getElementById('tableManifestNameRef').textContent = state.activeManifest.fileName;
+
+        document.getElementById('activeScopeBadge').className = "px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 badge-glow";
+        document.getElementById('activeScopeBadge').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> MANIFEST ACTIVE`;
+
+        document.getElementById('barcodeInput').disabled = false;
+        document.getElementById('btnSubmitScan').disabled = false;
+      }
+      updateUI();
+    });
+  </script>
+</body>
+</html>

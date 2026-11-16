@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E-Commerce Operations Suite & Return Parcel AWB Verification</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- html2pdf.js for clean PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0284c7',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    
+    /* Dedicated A4 Print Styling */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printContainer, #printContainer * {
+        visibility: visible;
+      }
+      #printContainer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: white !important;
+        color: black !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .page-break {
+        page-break-after: always;
+      }
+    }
+
+    /* Pulse animation for scanner ready light */
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .scanner-active-ring {
+      animation: pulse-ring 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col antialiased bg-slate-950 text-slate-100 overflow-x-hidden">
+
+  <!-- TOP HEADER & PRESET NAVIGATION BAR -->
+  <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <!-- Logo & Suite Name -->
+        <div class="flex items-center space-x-3">
+          <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+            <i class="fa-solid fa-boxes-packing text-white text-lg"></i>
+          </div>
+          <div>
+            <h1 class="font-bold text-lg text-white leading-none">OmniTrack Ops Suite</h1>
+            <p class="text-xs text-slate-400 mt-1">E-Commerce Warehouse & Logistics Tool</p>
+          </div>
+        </div>
+
+        <!-- Presets Selector / Tabs -->
+        <nav class="hidden md:flex space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800" id="presetTabs">
+          <button onclick="switchPreset('return-summary')" id="tab-return-summary" class="preset-btn active px-3.5 py-2 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center space-x-2 bg-sky-600 text-white shadow-md">
+            <i class="fa-solid fa-rotate-left"></i>
+            <span>Return Parcel Summary</span>
+            <span class="ml-1 bg-sky-400/30 text-sky-100 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">New</span>
+          </button>
+          
+          <button onclick="switchPreset('shipping-manifest')" id="tab-shipping-manifest" class="preset-btn px-3.5 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-all duration-200 flex items-center space-x-2">
+            <i class="fa-solid fa-truck-fast"></i>
+            <span>Dispatch Manifest</span>
+          </button>
+          
+          <button onclick="switchPreset('inventory-restock')" id="tab-inventory-restock" class="preset-btn px-3.5 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-all duration-200 flex items-center space-x-2">
+            <i class="fa-solid fa-warehouse"></i>
+            <span>Stock Audit</span>
+          </button>
+
+          <button onclick="switchPreset('order-fulfillment')" id="tab-order-fulfillment" class="preset-btn px-3.5 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-all duration-200 flex items-center space-x-2">
+            <i class="fa-solid fa-clipboard-check"></i>
+            <span>Order Fulfillment</span>
+          </button>
+        </nav>
+
+        <!-- System Clock & Status -->
+        <div class="flex items-center space-x-3 text-xs text-slate-400">
+          <div class="hidden sm:flex flex-col text-right">
+            <span id="liveClockDate" class="font-medium text-slate-300">YYYY-MM-DD</span>
+            <span id="liveClockTime" class="text-slate-400 font-mono">00:00:00</span>
+          </div>
+          <div class="h-8 w-px bg-slate-800 hidden sm:block"></div>
+          <button id="soundToggleBtn" onclick="toggleAudio()" title="Toggle Scan Audio Bleep" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+            <i id="soundIcon" class="fa-solid fa-volume-high"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- PRESET 1: RETURN PARCEL SUMMARY (NEW PRESET) -->
+    <div id="preset-return-summary" class="preset-view space-y-6">
+      
+      <!-- Top Banner / Description -->
+      <div class="bg-gradient-to-r from-slate-900 via-slate-900 to-sky-950 p-5 rounded-2xl border border-sky-900/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+        <div class="space-y-1">
+          <div class="flex items-center space-x-2">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">Barcode Scanner Active</span>
+            <span class="text-xs text-slate-400"><i class="fa-solid fa-keyboard mr-1"></i>Supports USB & Bluetooth Hardware Scanners</span>
+          </div>
+          <h2 class="text-xl font-bold text-white">Return Parcel AWB Verification</h2>
+          <p class="text-xs text-slate-400 max-w-2xl">
+            Scan return package tracking numbers consecutively. The scanner field remains locked in focus for high-speed continuous processing with immediate duplicate tracking detection.
+          </p>
+        </div>
+
+        <div class="flex items-center space-x-3 w-full md:w-auto justify-end">
+          <button onclick="clearAllScans()" class="px-3.5 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 text-xs font-medium transition flex items-center space-x-2">
+            <i class="fa-solid fa-rotate-right"></i>
+            <span>Reset List</span>
+          </button>
+          <button onclick="generateSummary()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-semibold transition shadow-lg shadow-sky-600/30 flex items-center space-x-2">
+            <i class="fa-solid fa-file-invoice"></i>
+            <span>Complete / Generate Summary</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SCANNER INPUT & LIVE COUNTERS GRID -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- SCANNER INPUT PANEL (5 Cols) -->
+        <div class="lg:col-span-5 bg-slate-900 rounded-2xl border border-slate-800 p-5 flex flex-col justify-between space-y-4 shadow-md">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <label for="awbInput" class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
+                <i class="fa-solid fa-barcode text-sky-400 text-sm"></i>
+                <span>AWB / Tracking ID Scanner Input</span>
+              </label>
+              <div class="flex items-center space-x-1.5 text-xs text-emerald-400">
+                <span class="h-2 w-2 rounded-full bg-emerald-500 scanner-active-ring"></span>
+                <span class="font-medium text-[11px]">Ready to scan</span>
+              </div>
+            </div>
+
+            <!-- Scanner Box -->
+            <form id="scanForm" onsubmit="handleManualSubmit(event)" class="relative">
+              <div class="relative rounded-xl overflow-hidden border-2 border-sky-500/80 focus-within:border-sky-400 focus-within:ring-4 focus-within:ring-sky-500/20 transition-all bg-slate-950">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-sky-400">
+                  <i class="fa-solid fa-barcode text-lg"></i>
+                </div>
+                <input 
+                  type="text" 
+                  id="awbInput" 
+                  placeholder="Scan AWB barcode or type manually..."
+                  autocomplete="off" 
+                  autofocus
+                  class="w-full pl-11 pr-24 py-3.5 bg-transparent text-white font-mono text-base placeholder-slate-500 focus:outline-none"
+                />
+                <button 
+                  type="submit" 
+                  class="absolute right-1.5 top-1.5 bottom-1.5 px-3.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1">
+                  <span>ENTER</span>
+                  <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                </button>
+              </div>
+            </form>
+
+            <p class="text-[11px] text-slate-500 mt-2 flex items-center justify-between">
+              <span><i class="fa-solid fa-circle-info mr-1"></i>Scanner autofocus automatically re-activates after click.</span>
+              <span class="text-slate-400 font-mono">Auto-Verify: ON</span>
+            </p>
+          </div>
+
+          <!-- Notification Feedback Alert Box -->
+          <div id="scanFeedback" class="hidden p-3.5 rounded-xl text-xs font-medium border flex items-center justify-between transition-all duration-300">
+            <div class="flex items-center space-x-2.5">
+              <i id="feedbackIcon" class="text-base"></i>
+              <span id="feedbackText">Scan ready</span>
+            </div>
+            <span id="feedbackCode" class="font-mono text-[11px] opacity-80 bg-slate-900/50 px-2 py-0.5 rounded"></span>
+          </div>
+
+          <!-- Quick Simulation Helper for Demo Purposes -->
+          <div class="pt-3 border-t border-slate-800/80">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[11px] font-semibold text-slate-400">Quick Test Helper (Click to simulate scan):</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              <button onclick="simulateScan('RET-99081234')" class="text-[11px] font-mono bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-md text-slate-300 transition">RET-99081234</button>
+              <button onclick="simulateScan('RET-88712399')" class="text-[11px] font-mono bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-md text-slate-300 transition">RET-88712399</button>
+              <button onclick="simulateScan('RET-99081234')" class="text-[11px] font-mono bg-amber-900/30 hover:bg-amber-900/50 border border-amber-700/50 px-2.5 py-1 rounded-md text-amber-300 transition" title="Simulate duplicate scan">Duplicate Test</button>
+              <button onclick="simulateScan('ERR-00000000')" class="text-[11px] font-mono bg-rose-900/30 hover:bg-rose-900/50 border border-rose-700/50 px-2.5 py-1 rounded-md text-rose-300 transition" title="Simulate unverified format">Failed Test</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- LIVE COUNTERS STATS CARDS (7 Cols) -->
+        <div class="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          
+          <!-- Total Scanned -->
+          <div class="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex flex-col justify-between shadow-md">
+            <div class="flex items-center justify-between text-slate-400">
+              <span class="text-xs font-semibold uppercase tracking-wider">Total Scanned</span>
+              <div class="p-2 rounded-xl bg-slate-800 text-slate-300"><i class="fa-solid fa-boxes-stacked"></i></div>
+            </div>
+            <div class="mt-3">
+              <div id="statTotal" class="text-3xl font-bold text-white font-mono">0</div>
+              <p class="text-[10px] text-slate-500 mt-1">All processed AWBs</p>
+            </div>
+          </div>
+
+          <!-- Verified -->
+          <div class="bg-slate-900 p-4 rounded-2xl border border-emerald-900/40 flex flex-col justify-between shadow-md">
+            <div class="flex items-center justify-between text-emerald-400">
+              <span class="text-xs font-semibold uppercase tracking-wider">Verified</span>
+              <div class="p-2 rounded-xl bg-emerald-950 text-emerald-400"><i class="fa-solid fa-circle-check"></i></div>
+            </div>
+            <div class="mt-3">
+              <div id="statVerified" class="text-3xl font-bold text-emerald-400 font-mono">0</div>
+              <p class="text-[10px] text-emerald-500/80 mt-1">Valid & logged</p>
+            </div>
+          </div>
+
+          <!-- Duplicates -->
+          <div class="bg-slate-900 p-4 rounded-2xl border border-amber-900/40 flex flex-col justify-between shadow-md">
+            <div class="flex items-center justify-between text-amber-400">
+              <span class="text-xs font-semibold uppercase tracking-wider">Duplicates</span>
+              <div class="p-2 rounded-xl bg-amber-950 text-amber-400"><i class="fa-solid fa-copy"></i></div>
+            </div>
+            <div class="mt-3">
+              <div id="statDuplicate" class="text-3xl font-bold text-amber-400 font-mono">0</div>
+              <p class="text-[10px] text-amber-500/80 mt-1">Flagged / Not re-counted</p>
+            </div>
+          </div>
+
+          <!-- Pending / Unverified -->
+          <div class="bg-slate-900 p-4 rounded-2xl border border-rose-900/40 flex flex-col justify-between shadow-md">
+            <div class="flex items-center justify-between text-rose-400">
+              <span class="text-xs font-semibold uppercase tracking-wider">Unverified</span>
+              <div class="p-2 rounded-xl bg-rose-950 text-rose-400"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            </div>
+            <div class="mt-3">
+              <div id="statPending" class="text-3xl font-bold text-rose-400 font-mono">0</div>
+              <p class="text-[10px] text-rose-500/80 mt-1">Format invalid or failed</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- LIVE SCAN LOG TABLE -->
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
+        <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
+          <div class="flex items-center space-x-2">
+            <h3 class="font-bold text-sm text-white flex items-center space-x-2">
+              <i class="fa-solid fa-list-check text-sky-400"></i>
+              <span>Live Parcel Verification Log</span>
+            </h3>
+            <span id="logCountBadge" class="bg-slate-800 text-slate-300 text-xs px-2 py-0.5 rounded-full font-mono">0 items</span>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <input 
+              type="text" 
+              id="searchLogInput" 
+              onkeyup="filterScanLog()" 
+              placeholder="Search AWB..." 
+              class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+            />
+          </div>
+        </div>
+
+        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+          <table class="w-full text-left border-collapse">
+            <thead class="bg-slate-950 sticky top-0 z-10 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4 w-16">Sl. No.</th>
+                <th class="py-3 px-4">AWB / Tracking ID</th>
+                <th class="py-3 px-4">Verification Status</th>
+                <th class="py-3 px-4">Scan Time</th>
+                <th class="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="scanLogTbody" class="divide-y divide-slate-800/60 text-xs font-mono">
+              <!-- Empty state default -->
+              <tr id="emptyRow">
+                <td colspan="5" class="py-12 text-center text-slate-500">
+                  <div class="flex flex-col items-center justify-center space-y-2">
+                    <i class="fa-solid fa-barcode text-3xl text-slate-700"></i>
+                    <p class="font-sans text-sm font-medium">No return parcels scanned yet</p>
+                    <p class="font-sans text-xs text-slate-600">Scan AWB barcodes above to populate live verification log.</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- PRESET 2: DISPATCH MANIFEST (EXISTING PRESET MOCK) -->
+    <div id="preset-shipping-manifest" class="preset-view hidden space-y-6">
+      <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-truck-fast text-sky-400"></i> Dispatch Shipping Manifest
+            </h2>
+            <p class="text-xs text-slate-400">Create courier handover manifests for outgoing packages.</p>
+          </div>
+          <button class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700">
+            <i class="fa-solid fa-plus mr-1"></i> New Courier Batch
+          </button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+            <span class="text-xs text-slate-400">DHL Express</span>
+            <p class="text-xl font-bold text-white mt-1">42 Orders Ready</p>
+            <p class="text-[11px] text-emerald-400 mt-2"><i class="fa-solid fa-circle-check"></i> Manifest Signed</p>
+          </div>
+          <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+            <span class="text-xs text-slate-400">FedEx Ground</span>
+            <p class="text-xl font-bold text-white mt-1">18 Orders Pending</p>
+            <p class="text-[11px] text-amber-400 mt-2"><i class="fa-solid fa-clock"></i> Awaiting Pickup</p>
+          </div>
+          <div class="p-4 bg-slate-950 rounded-xl border border-slate-800">
+            <span class="text-xs text-slate-400">BlueDart Courier</span>
+            <p class="text-xl font-bold text-white mt-1">89 Orders Dispatched</p>
+            <p class="text-[11px] text-sky-400 mt-2"><i class="fa-solid fa-truck-ramp-box"></i> In Transit</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRESET 3: INVENTORY RESTOCK (EXISTING PRESET MOCK) -->
+    <div id="preset-inventory-restock" class="preset-view hidden space-y-6">
+      <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-warehouse text-sky-400"></i> Stock Audit & Restock
+            </h2>
+            <p class="text-xs text-slate-400">Verify warehouse shelf quantities and generate inventory restock tags.</p>
+          </div>
+        </div>
+        <div class="p-8 text-center bg-slate-950 rounded-xl border border-slate-800 text-slate-400">
+          <i class="fa-solid fa-boxes-stacked text-4xl mb-3 text-slate-700"></i>
+          <p class="text-sm font-medium text-slate-300">Inventory Module Active</p>
+          <p class="text-xs text-slate-500 mt-1">All standard stock-taking filters are preserved in this session.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRESET 4: ORDER FULFILLMENT (EXISTING PRESET MOCK) -->
+    <div id="preset-order-fulfillment" class="preset-view hidden space-y-6">
+      <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-clipboard-check text-sky-400"></i> Order Fulfillment Station
+            </h2>
+            <p class="text-xs text-slate-400">Match picked items against customer invoices prior to packing.</p>
+          </div>
+        </div>
+        <div class="p-8 text-center bg-slate-950 rounded-xl border border-slate-800 text-slate-400">
+          <i class="fa-solid fa-barcode text-4xl mb-3 text-slate-700"></i>
+          <p class="text-sm font-medium text-slate-300">Fulfillment Verification Ready</p>
+          <p class="text-xs text-slate-500 mt-1">Scan item UPCs to complete packing lists.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL: RETURN PARCEL SUMMARY & PDF PREVIEW -->
+  <div id="summaryModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm hidden p-4 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full my-8 shadow-2xl flex flex-col max-h-[90vh]">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+        <div class="flex items-center space-x-2">
+          <div class="p-2 bg-sky-500/20 rounded-lg text-sky-400">
+            <i class="fa-solid fa-file-pdf text-lg"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-base text-white">Generated Return Parcel Summary</h3>
+            <p class="text-xs text-slate-400">A4 Printable Format & Official Record Preview</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button onclick="triggerPrint()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition flex items-center space-x-1.5">
+            <i class="fa-solid fa-print"></i>
+            <span>Print Summary</span>
+          </button>
+          
+          <button onclick="downloadPDF()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-sky-600/30 transition flex items-center space-x-1.5">
+            <i class="fa-solid fa-download"></i>
+            <span>Save as PDF</span>
+          </button>
+
+          <button onclick="closeSummaryModal()" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition ml-2">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Preview Container Body -->
+      <div class="p-6 overflow-y-auto flex-1 bg-slate-950/40">
+        
+        <!-- DOCUMENT WRAPPER TARGETED BY PRINT & HTML2PDF -->
+        <div id="printContainer" class="bg-white text-slate-900 p-8 sm:p-10 rounded-xl shadow-md border border-slate-200 max-w-[210mm] mx-auto min-h-[297mm] flex flex-col justify-between font-sans">
+          
+          <!-- Document Content Area -->
+          <div>
+            <!-- Header Block -->
+            <div class="border-b-2 border-slate-900 pb-5 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-sky-700 bg-sky-50 px-2.5 py-1 rounded border border-sky-200">Official Logistics Document</span>
+                <h1 class="text-2xl font-black text-slate-900 uppercase tracking-tight mt-2">Return Parcel Summary</h1>
+                <p class="text-xs text-slate-500 mt-0.5">Verified Return Goods Receive Note (GRN)</p>
+              </div>
+
+              <div class="text-right text-xs text-slate-600 space-y-1 bg-slate-50 p-3 rounded-lg border border-slate-200 w-full sm:w-auto">
+                <div class="flex justify-between sm:justify-end gap-3">
+                  <span class="font-semibold text-slate-500">Date:</span>
+                  <span id="summaryDate" class="font-mono font-bold text-slate-800">2026-10-29</span>
+                </div>
+                <div class="flex justify-between sm:justify-end gap-3">
+                  <span class="font-semibold text-slate-500">Time:</span>
+                  <span id="summaryTime" class="font-mono font-bold text-slate-800">17:16:00</span>
+                </div>
+                <div class="flex justify-between sm:justify-end gap-3">
+                  <span class="font-semibold text-slate-500">Session ID:</span>
+                  <span id="summarySession" class="font-mono text-slate-600">#RPS-8841</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Summary KPI Badges -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg text-center">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Scanned</p>
+                <p id="sumTotalScanned" class="text-xl font-bold text-slate-900 mt-0.5">0</p>
+              </div>
+              <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
+                <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Total Verified</p>
+                <p id="sumTotalVerified" class="text-xl font-bold text-emerald-800 mt-0.5">0</p>
+              </div>
+              <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg text-center">
+                <p class="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Duplicates</p>
+                <p id="sumTotalDuplicates" class="text-xl font-bold text-amber-800 mt-0.5">0</p>
+              </div>
+              <div class="p-3 bg-rose-50 border border-rose-200 rounded-lg text-center">
+                <p class="text-[10px] font-bold text-rose-700 uppercase tracking-wider">Unverified</p>
+                <p id="sumTotalUnverified" class="text-xl font-bold text-rose-800 mt-0.5">0</p>
+              </div>
+            </div>
+
+            <!-- Summary Table -->
+            <div class="overflow-hidden rounded-lg border border-slate-300 mb-6">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr class="bg-slate-900 text-white font-semibold text-[11px] uppercase tracking-wider">
+                    <th class="py-2.5 px-3 border-b border-slate-300 w-16 text-center">Sl. No.</th>
+                    <th class="py-2.5 px-4 border-b border-slate-300">AWB / Tracking ID</th>
+                    <th class="py-2.5 px-4 border-b border-slate-300">Status</th>
+                    <th class="py-2.5 px-4 border-b border-slate-300 text-right">Scan Time</th>
+                  </tr>
+                </thead>
+                <tbody id="summaryTableBody" class="divide-y divide-slate-200 font-mono text-slate-800">
+                  <!-- Generated Rows inserted via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Document Footer / Signatures -->
+          <div class="pt-6 border-t border-slate-200 text-xs text-slate-500">
+            <div class="grid grid-cols-2 gap-8 mb-6 pt-4">
+              <div>
+                <p class="text-[10px] uppercase font-bold text-slate-400 mb-8">Verified By (Warehouse Incharge)</p>
+                <div class="border-b border-slate-400 w-48"></div>
+                <p class="mt-1 text-[11px]">Signature & Stamp</p>
+              </div>
+              <div class="text-right flex flex-col items-end">
+                <p class="text-[10px] uppercase font-bold text-slate-400 mb-8">Received By (Logistics Partner)</p>
+                <div class="border-b border-slate-400 w-48"></div>
+                <p class="mt-1 text-[11px]">Signature & Date</p>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between text-[10px] text-slate-400 pt-2 border-t border-slate-100">
+              <span>Generated via OmniTrack Return Operations Suite</span>
+              <span>Page 1 of 1</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between text-xs text-slate-400">
+        <span><i class="fa-solid fa-lightbulb text-amber-400 mr-1"></i> A4 layout auto-formats to multi-page if records expand.</span>
+        <button onclick="closeSummaryModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition">
+          Close Preview
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // State Data Storage
+    let scanData = []; // Array of { id, awb, status, time, timestamp }
+    let audioEnabled = true;
+    let audioCtx = null;
+
+    // Initialize Page
+    document.addEventListener('DOMContentLoaded', () => {
+      startLiveClock();
+      setupScannerInput();
+      
+      // Focus scanner input on load and enforce continuous focus
+      const scannerInput = document.getElementById('awbInput');
+      scannerInput.focus();
+
+      // Maintain input focus when clicking on empty areas unless user is selecting text
+      document.addEventListener('click', (e) => {
+        const activeModal = !document.getElementById('summaryModal').classList.contains('hidden');
+        if (!activeModal && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') {
+          scannerInput.focus();
+        }
+      });
+    });
+
+    // Preset Switching Logic
+    function switchPreset(presetId) {
+      // Hide all preset views
+      document.querySelectorAll('.preset-view').forEach(view => view.classList.add('hidden'));
+      
+      // Remove active class from all tabs
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.classList.remove('bg-sky-600', 'text-white', 'shadow-md');
+        btn.classList.add('text-slate-400');
+      });
+
+      // Show chosen preset
+      const targetView = document.getElementById('preset-' + presetId);
+      if (targetView) {
+        targetView.classList.remove('hidden');
+      }
+
+      // Highlight chosen tab
+      const targetTab = document.getElementById('tab-' + presetId);
+      if (targetTab) {
+        targetTab.classList.remove('text-slate-400');
+        targetTab.classList.add('bg-sky-600', 'text-white', 'shadow-md');
+      }
+
+      // If switching back to return summary, autofocus barcode field
+      if (presetId === 'return-summary') {
+        setTimeout(() => document.getElementById('awbInput').focus(), 100);
+      }
+    }
+
+    // Live System Clock
+    function startLiveClock() {
+      function update() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+
+        document.getElementById('liveClockDate').textContent = `${year}-${month}-${day}`;
+        document.getElementById('liveClockTime').textContent = `${hours}:${minutes}:${seconds}`;
+      }
+      update();
+      setInterval(update, 1000);
+    }
+
+    // Sound FX Synthesis using Web Audio API
+    function playAudioTone(type) {
+      if (!audioEnabled) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'success') {
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+          osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.08);
+        } else if (type === 'duplicate') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(300, audioCtx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.18);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.18);
+        } else {
+          // Error tone
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.2);
+        }
+      } catch (e) {
+        console.log('Audio playback prevented');
+      }
+    }
+
+    function toggleAudio() {
+      audioEnabled = !audioEnabled;
+      const icon = document.getElementById('soundIcon');
+      if (audioEnabled) {
+        icon.className = "fa-solid fa-volume-high";
+        showFeedback('info', 'Audio feedback enabled');
+      } else {
+        icon.className = "fa-solid fa-volume-xmark";
+        showFeedback('info', 'Audio feedback muted');
+      }
+    }
+
+    // Scanner Barcode Logic
+    function setupScannerInput() {
+      const input = document.getElementById('awbInput');
+      
+      // Auto-submit on rapid scanner ENTER signal
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          processScanInput(input.value);
+        }
+      });
+    }
+
+    function handleManualSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('awbInput');
+      processScanInput(input.value);
+    }
+
+    function simulateScan(code) {
+      processScanInput(code);
+    }
+
+    function processScanInput(rawCode) {
+      const awb = rawCode.trim().toUpperCase();
+      const input = document.getElementById('awbInput');
+      
+      if (!awb) return;
+
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0];
+      
+      // 1. Check for Duplicate AWB
+      const isDuplicate = scanData.some(item => item.awb === awb);
+
+      // 2. Validate AWB Format (Mock Rule: 'ERR' prefix triggers Unverified)
+      const isValid = !awb.startsWith('ERR') && awb.length >= 5;
+
+      let status = 'Verified';
+      if (isDuplicate) {
+        status = 'Duplicate';
+      } else if (!isValid) {
+        status = 'Unverified';
+      }
+
+      // Record Entry
+      const entry = {
+        id: scanData.length + 1,
+        awb: awb,
+        status: status,
+        time: timeStr,
+        timestamp: now.getTime()
+      };
+
+      scanData.unshift(entry); // Add latest to top
+
+      // Feedback & Sounds
+      if (status === 'Verified') {
+        playAudioTone('success');
+        showFeedback('success', 'Verified & Added', awb);
+      } else if (status === 'Duplicate') {
+        playAudioTone('duplicate');
+        showFeedback('warning', 'DUPLICATE DETECTED', awb);
+      } else {
+        playAudioTone('error');
+        showFeedback('error', 'INVALID AWB FORMAT', awb);
+      }
+
+      // Reset input field and retain focus immediately
+      input.value = '';
+      input.focus();
+
+      // Update UI Tables and Counters
+      updateLiveStats();
+      renderScanLog();
+    }
+
+    // Feedback Alert Display
+    function showFeedback(type, text, code = '') {
+      const box = document.getElementById('scanFeedback');
+      const icon = document.getElementById('feedbackIcon');
+      const textEl = document.getElementById('feedbackText');
+      const codeEl = document.getElementById('feedbackCode');
+
+      box.classList.remove('hidden', 'bg-emerald-950/80', 'border-emerald-700', 'text-emerald-300',
+        'bg-amber-950/80', 'border-amber-700', 'text-amber-300',
+        'bg-rose-950/80', 'border-rose-700', 'text-rose-300', 'bg-slate-800', 'border-slate-700', 'text-slate-300');
+
+      if (type === 'success') {
+        box.classList.add('bg-emerald-950/80', 'border-emerald-700', 'text-emerald-300');
+        icon.className = 'fa-solid fa-circle-check text-emerald-400';
+      } else if (type === 'warning') {
+        box.classList.add('bg-amber-950/80', 'border-amber-700', 'text-amber-300');
+        icon.className = 'fa-solid fa-copy text-amber-400';
+      } else if (type === 'error') {
+        box.classList.add('bg-rose-950/80', 'border-rose-700', 'text-rose-300');
+        icon.className = 'fa-solid fa-triangle-exclamation text-rose-400';
+      } else {
+        box.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-300');
+        icon.className = 'fa-solid fa-circle-info text-sky-400';
+      }
+
+      textEl.textContent = text;
+      codeEl.textContent = code;
+    }
+
+    // Live Statistics Counters Calculation
+    function updateLiveStats() {
+      const total = scanData.length;
+      const verified = scanData.filter(i => i.status === 'Verified').length;
+      const duplicate = scanData.filter(i => i.status === 'Duplicate').length;
+      const pending = scanData.filter(i => i.status === 'Unverified').length;
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statVerified').textContent = verified;
+      document.getElementById('statDuplicate').textContent = duplicate;
+      document.getElementById('statPending').textContent = pending;
+
+      document.getElementById('logCountBadge').textContent = `${total} items`;
+    }
+
+    // Render Log Table Rows
+    function renderScanLog(filteredItems = null) {
+      const tbody = document.getElementById('scanLogTbody');
+      const itemsToRender = filteredItems || scanData;
+
+      if (itemsToRender.length === 0) {
+        tbody.innerHTML = `
+          <tr id="emptyRow">
+            <td colspan="5" class="py-12 text-center text-slate-500">
+              <div class="flex flex-col items-center justify-center space-y-2">
+                <i class="fa-solid fa-barcode text-3xl text-slate-700"></i>
+                <p class="font-sans text-sm font-medium">No return parcels found</p>
+              </div>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = itemsToRender.map((item, idx) => {
+        let statusBadge = '';
+        if (item.status === 'Verified') {
+          statusBadge = `<span class="inline-flex items-center space-x-1 bg-emerald-950 text-emerald-400 border border-emerald-800 px-2.5 py-0.5 rounded-full text-[11px] font-semibold"><i class="fa-solid fa-check text-[9px]"></i><span>Verified</span></span>`;
+        } else if (item.status === 'Duplicate') {
+          statusBadge = `<span class="inline-flex items-center space-x-1 bg-amber-950 text-amber-400 border border-amber-800 px-2.5 py-0.5 rounded-full text-[11px] font-semibold"><i class="fa-solid fa-copy text-[9px]"></i><span>Duplicate</span></span>`;
+        } else {
+          statusBadge = `<span class="inline-flex items-center space-x-1 bg-rose-950 text-rose-400 border border-rose-800 px-2.5 py-0.5 rounded-full text-[11px] font-semibold"><i class="fa-solid fa-xmark text-[9px]"></i><span>Unverified</span></span>`;
+        }
+
+        return `
+          <tr class="hover:bg-slate-800/50 transition">
+            <td class="py-3 px-4 text-slate-400 font-sans">${itemsToRender.length - idx}</td>
+            <td class="py-3 px-4 font-bold text-white tracking-wide">${item.awb}</td>
+            <td class="py-3 px-4 font-sans">${statusBadge}</td>
+            <td class="py-3 px-4 text-slate-300">${item.time}</td>
+            <td class="py-3 px-4 text-right">
+              <button onclick="removeScan('${item.awb}')" class="text-slate-500 hover:text-rose-400 transition p-1" title="Remove Entry">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function removeScan(awb) {
+      scanData = scanData.filter(item => item.awb !== awb);
+      updateLiveStats();
+      renderScanLog();
+      showFeedback('info', 'Removed AWB', awb);
+    }
+
+    function filterScanLog() {
+      const query = document.getElementById('searchLogInput').value.trim().toUpperCase();
+      if (!query) {
+        renderScanLog();
+      } else {
+        const filtered = scanData.filter(i => i.awb.includes(query));
+        renderScanLog(filtered);
+      }
+    }
+
+    function clearAllScans() {
+      if (scanData.length === 0) return;
+      if (confirm('Are you sure you want to clear all scanned AWBs for this session?')) {
+        scanData = [];
+        updateLiveStats();
+        renderScanLog();
+        document.getElementById('scanFeedback').classList.add('hidden');
+        document.getElementById('awbInput').focus();
+      }
+    }
+
+    // SUMMARY GENERATION & MODAL DISPLAY
+    function generateSummary() {
+      const now = new Date();
+      
+      // Formatting Date: YYYY-MM-DD
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const currentDateStr = `${year}-${month}-${day}`;
+
+      // Formatting Time: HH:MM:SS
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const currentTimeStr = `${hours}:${minutes}:${seconds}`;
+
+      // Update Summary Header Elements
+      document.getElementById('summaryDate').textContent = currentDateStr;
+      document.getElementById('summaryTime').textContent = currentTimeStr;
+      document.getElementById('summarySession').textContent = `#RPS-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      // Filter only VERIFIED parcels for the clean summary table as required
+      const verifiedList = scanData.filter(item => item.status === 'Verified');
+
+      // Populate KPI Totals inside Document Header
+      document.getElementById('sumTotalScanned').textContent = scanData.length;
+      document.getElementById('sumTotalVerified').textContent = verifiedList.length;
+      document.getElementById('sumTotalDuplicates').textContent = scanData.filter(i => i.status === 'Duplicate').length;
+      document.getElementById('sumTotalUnverified').textContent = scanData.filter(i => i.status === 'Unverified').length;
+
+      // Populate Summary Table
+      const tbody = document.getElementById('summaryTableBody');
+      if (verifiedList.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" class="py-8 text-center text-slate-400 font-sans">
+              No verified return parcels captured in this session.
+            </td>
+          </tr>`;
+      } else {
+        // Reverse array so original sequential scans render 1..N
+        const sortedList = [...verifiedList].reverse();
+        
+        tbody.innerHTML = sortedList.map((item, index) => `
+          <tr class="hover:bg-slate-50 border-b border-slate-200">
+            <td class="py-2.5 px-3 text-center text-slate-500 font-sans">${index + 1}</td>
+            <td class="py-2.5 px-4 font-bold text-slate-900">${item.awb}</td>
+            <td class="py-2.5 px-4 text-emerald-700 font-semibold font-sans">Verified</td>
+            <td class="py-2.5 px-4 text-right text-slate-600">${item.time}</td>
+          </tr>
+        `).join('');
+      }
+
+      // Open Modal
+      document.getElementById('summaryModal').classList.remove('hidden');
+    }
+
+    function closeSummaryModal() {
+      document.getElementById('summaryModal').classList.add('hidden');
+      document.getElementById('awbInput').focus();
+    }
+
+    // PRINT SUMMARY ACTION
+    function triggerPrint() {
+      window.print();
+    }
+
+    // SAVE AS PDF ACTION (HTML2PDF)
+    function downloadPDF() {
+      const element = document.getElementById('printContainer');
+      const now = new Date();
+      
+      const YYYY = now.getFullYear();
+      const MM = String(now.getMonth() + 1).padStart(2, '0');
+      const DD = String(now.getDate()).padStart(2, '0');
+      const HH = String(now.getHours()).padStart(2, '0');
+      const Min = String(now.getMinutes()).padStart(2, '0');
+
+      // Filename standard: Return_Summary_YYYY-MM-DD_HH-MM.pdf
+      const filename = `Return_Summary_${YYYY}-${MM}-${DD}_${HH}-${Min}.pdf`;
+
+      const opt = {
+        margin:       [10, 10, 10, 10],
+        filename:     filename,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      // Generate PDF
+      html2pdf().set(opt).from(element).save();
+    }
+  </script>
+</body>
+</html>

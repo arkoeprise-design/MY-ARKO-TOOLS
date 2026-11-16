@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARKO UNIVERSAL VMS - Automatic AWB Video Recording System</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js for Dashboard Analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS for Excel Import/Export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- ZXing Barcode Scanning Library -->
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              500: '#0284c7',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    .scan-pulse {
+      animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans antialiased bg-slate-950 text-slate-100 overflow-hidden">
+
+  <!-- TOP APP NAVIGATION BAR -->
+  <header class="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 shadow-md">
+    <div class="flex items-center space-x-4">
+      <div class="bg-gradient-to-tr from-cyan-600 to-blue-600 p-2.5 rounded-xl shadow-lg shadow-cyan-500/20">
+        <i class="fa-solid fa-video text-white text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold tracking-wide text-white flex items-center gap-2">
+          ARKO UNIVERSAL VMS
+          <span class="text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-medium">v2.5 Pro</span>
+        </h1>
+        <p class="text-xs text-slate-400">Multi-Marketplace AWB Automatic Packing Video Station</p>
+      </div>
+    </div>
+
+    <!-- Active Status & More Options -->
+    <div class="flex items-center space-x-4">
+      <div id="statusBadge" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-300">
+        <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span id="statusText" class="font-medium">System Ready</span>
+      </div>
+
+      <!-- Quick Storage Folder Selection -->
+      <button id="btnSetDirectory" title="Select Output Storage Root Directory" class="flex items-center gap-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-2 rounded-lg transition-all">
+        <i class="fa-solid fa-folder-open text-amber-400"></i>
+        <span id="dirNameDisplay">Set Directory</span>
+      </button>
+
+      <!-- Current Clock -->
+      <div class="text-right hidden md:block border-l border-slate-800 pl-4">
+        <div id="liveClock" class="text-sm font-mono font-semibold text-slate-200">00:00:00 AM</div>
+        <div id="liveDate" class="text-[10px] text-slate-400">00 MMM YYYY</div>
+      </div>
+
+      <!-- MORE OPTIONS DROPDOWN BUTTON -->
+      <button id="btnMoreOptions" onclick="toggleMoreOptionsModal()" class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-3.5 py-2 rounded-xl flex items-center gap-2 transition-all font-semibold shadow-md shadow-cyan-600/20">
+        <i class="fa-solid fa-bars"></i>
+        <span>More Options</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MORE OPTIONS MODAL MENU -->
+  <div id="moreOptionsModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl relative">
+      <div class="flex justify-between items-center mb-5 pb-3 border-b border-slate-800">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-cyan-400"></i> System Options & Analytics
+        </h3>
+        <button onclick="toggleMoreOptionsModal()" class="text-slate-400 hover:text-white text-lg p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 gap-3 mb-4">
+        <button onclick="switchTab('tab-station'); toggleMoreOptionsModal();" class="flex items-center gap-4 p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/60 text-left transition-all group">
+          <div class="p-2.5 rounded-lg bg-cyan-500/20 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-white transition-all">
+            <i class="fa-solid fa-camera text-base"></i>
+          </div>
+          <div>
+            <div class="text-sm font-bold text-slate-200">Packing Station</div>
+            <div class="text-xs text-slate-400">Main scanner barcode camera capture interface</div>
+          </div>
+        </button>
+
+        <button onclick="switchTab('tab-dashboard'); toggleMoreOptionsModal();" class="flex items-center gap-4 p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/60 text-left transition-all group">
+          <div class="p-2.5 rounded-lg bg-emerald-500/20 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-all">
+            <i class="fa-solid fa-chart-pie text-base"></i>
+          </div>
+          <div>
+            <div class="text-sm font-bold text-slate-200">Dashboard & Analytics</div>
+            <div class="text-xs text-slate-400">Total, daily, weekly, & monthly packing metrics</div>
+          </div>
+        </button>
+
+        <button onclick="switchTab('tab-history'); toggleMoreOptionsModal();" class="flex items-center gap-4 p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/60 text-left transition-all group">
+          <div class="p-2.5 rounded-lg bg-amber-500/20 text-amber-400 group-hover:bg-amber-500 group-hover:text-white transition-all">
+            <i class="fa-solid fa-list-check text-base"></i>
+          </div>
+          <div>
+            <div class="text-sm font-bold text-slate-200">AWB Recording Logs</div>
+            <div class="text-xs text-slate-400">Searchable history log and Excel export reports</div>
+          </div>
+        </button>
+
+        <button onclick="switchTab('tab-settings'); toggleMoreOptionsModal();" class="flex items-center gap-4 p-3.5 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700/60 text-left transition-all group">
+          <div class="p-2.5 rounded-lg bg-purple-500/20 text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-all">
+            <i class="fa-solid fa-sliders text-base"></i>
+          </div>
+          <div>
+            <div class="text-sm font-bold text-slate-200">Settings & Audio / Video</div>
+            <div class="text-xs text-slate-400">Hardware resolution, audio devices, and storage folder setup</div>
+          </div>
+        </button>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 text-right">
+        <button onclick="toggleMoreOptionsModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-all">
+          Close Menu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APPLICATION CONTENT WORKSPACE -->
+  <div class="flex-1 flex overflow-hidden">
+
+    <!-- MAIN VIEW PANELS -->
+    <main class="flex-1 bg-slate-950 overflow-y-auto relative">
+
+      <!-- ================= TAB 1: PACKING STATION (MAIN SCREEN) ================= -->
+      <section id="tab-station" class="tab-page p-4 lg:p-6 h-full flex flex-col">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 h-full">
+
+          <!-- LEFT COLUMN: AWB SCANNER & CONTROLS (Compact 4 Cols) -->
+          <div class="lg:col-span-4 flex flex-col gap-4">
+            
+            <!-- Barcode Scanner Card -->
+            <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl space-y-4">
+              <div class="flex justify-between items-center">
+                <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  AUTOMATIC AWB SCANNER (Keystroke / Wedge / Manual)
+                </label>
+                <span class="text-cyan-400 text-xs font-medium flex items-center gap-1.5 bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1 rounded-full">
+                  <i class="fa-solid fa-bolt"></i> Auto Scanner Active
+                </span>
+              </div>
+
+              <div class="relative">
+                <input type="text" id="awbInput" autocomplete="off" placeholder="Scan AWB Barcode (e.g., FMPP12345678, AMZ998877)..."
+                  class="w-full bg-slate-950 border-2 border-cyan-500/50 focus:border-cyan-400 focus:outline-none rounded-xl px-4 py-3.5 text-xl font-mono text-white tracking-wider placeholder-slate-600 shadow-inner pr-14">
+                <button id="btnManualScan" class="absolute right-2.5 top-2.5 bg-cyan-600 hover:bg-cyan-500 text-white p-2.5 rounded-lg text-sm transition-all shadow-md" title="Process Input">
+                  <i class="fa-solid fa-barcode"></i>
+                </button>
+              </div>
+
+              <!-- Workflow Instructions Banner -->
+              <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-400 space-y-1.5">
+                <div class="font-bold text-slate-200 flex items-center gap-2">
+                  <i class="fa-solid fa-circle-info text-cyan-400"></i> Scanning Rules:
+                </div>
+                <div class="flex items-center gap-2 text-[11px] text-slate-300">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span><strong>1st Scan:</strong> Auto-starts recording for scanned AWB.</span>
+                </div>
+                <div class="flex items-center gap-2 text-[11px] text-slate-300">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                  <span><strong>2nd Scan (Same AWB):</strong> Auto-stops recording and saves video into AWB folder.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Active Recording AWB Display Box -->
+            <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl flex-1 flex flex-col justify-between">
+              <div>
+                <div class="flex justify-between items-center mb-3">
+                  <span class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Current Active Session</span>
+                  <span id="detectedMarketplace" class="inline-block px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">No Marketplace</span>
+                </div>
+                <div id="currentAwbDisplay" class="text-2xl font-mono font-bold text-amber-400 tracking-wide bg-slate-950 p-4 rounded-xl border border-slate-800 text-center truncate">
+                  NO ACTIVE AWB
+                </div>
+              </div>
+
+              <!-- Manual Action Buttons -->
+              <div class="grid grid-cols-2 gap-3 mt-4">
+                <button id="btnManualStart" class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+                  <i class="fa-solid fa-play"></i> Start Recording
+                </button>
+                <button id="btnManualStop" disabled class="py-3 bg-rose-600/50 text-slate-400 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-2 cursor-not-allowed">
+                  <i class="fa-solid fa-stop"></i> Stop & Save
+                </button>
+              </div>
+
+              <!-- Recent Scans Quick Feed -->
+              <div class="mt-4 pt-4 border-t border-slate-800">
+                <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">Recent Session History</h4>
+                <div id="recentScansFeed" class="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  <div class="text-xs text-slate-500 italic text-center py-3">No recent recordings in this session.</div>
+                </div>
+                <!-- Developer Credit Attribution Below Recent History -->
+                <div class="mt-3 pt-2 text-center border-t border-slate-800/60">
+                  <p class="text-[10px] text-slate-500 font-medium tracking-tight">
+                    Developed &amp; Managed by <span class="text-cyan-400/90 font-semibold">BIVAS</span> &bull; Contact: <span class="text-slate-400 font-mono">+91 9733166665</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: LARGE LIVE CAMERA PREVIEW (Expanded 8 Cols) -->
+          <div class="lg:col-span-8 flex flex-col gap-4">
+            
+            <div class="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden flex flex-col relative shadow-2xl h-full min-h-[480px]">
+              
+              <!-- Camera Controls Header -->
+              <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center gap-2">
+                <div class="flex items-center gap-2 flex-1 min-w-0">
+                  <i class="fa-solid fa-video text-cyan-400 text-xs"></i>
+                  <select id="cameraSelect" class="bg-slate-900 text-xs text-slate-200 border border-slate-800 rounded-lg p-1.5 focus:outline-none cursor-pointer truncate w-full">
+                    <option value="">Loading Camera Feed...</option>
+                  </select>
+                </div>
+
+                <!-- Mic Toggle & Recording Badge -->
+                <div class="flex items-center gap-2 shrink-0">
+                  <button id="btnToggleMic" class="bg-slate-900 hover:bg-slate-800 text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs flex items-center gap-1.5 transition-all">
+                    <i id="micIcon" class="fa-solid fa-microphone text-emerald-400"></i>
+                    <span id="micStatusText" class="text-[11px] hidden sm:inline">Mic On</span>
+                  </button>
+                  <!-- VOICE ALERT TOGGLE BUTTON -->
+                  <button id="btnToggleVoiceAlert" class="bg-slate-900 hover:bg-slate-800 text-slate-200 px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs flex items-center gap-1.5 transition-all">
+                    <i id="voiceAlertIcon" class="fa-solid fa-volume-high text-cyan-400"></i>
+                    <span id="voiceAlertStatusText" class="text-[11px] hidden sm:inline">Voice Alert On</span>
+                  </button>
+                  <div id="recordingBadge" class="hidden flex items-center gap-1.5 bg-rose-600 text-white px-2.5 py-1 rounded-lg font-bold text-xs uppercase animate-pulse">
+                    <span class="w-2 h-2 rounded-full bg-white"></span>
+                    <span id="recTimerDisplay" class="font-mono">00:00</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Live Video Output Viewport -->
+              <div class="flex-1 bg-black relative flex items-center justify-center overflow-hidden">
+                <video id="webcamPreview" autoplay playsinline muted class="w-full h-full object-contain"></video>
+                
+                <!-- Hidden Canvas for Watermark Compositing -->
+                <canvas id="compositorCanvas" class="hidden"></canvas>
+
+                <!-- Camera Placeholder State -->
+                <div id="camPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-600 bg-slate-950/90 z-10 hidden">
+                  <i class="fa-solid fa-video-slash text-4xl mb-2"></i>
+                  <p class="text-xs font-medium">Camera Feed Disconnected</p>
+                  <button onclick="initCamera()" class="mt-2 px-3 py-1 bg-cyan-600 text-white text-[11px] rounded-lg font-medium">Re-initialize</button>
+                </div>
+
+                <!-- Scan Animation Overlay when Recording -->
+                <div id="recordingScanOverlay" class="absolute inset-0 border-4 border-rose-500/40 pointer-events-none hidden">
+                  <div class="absolute inset-0 bg-gradient-to-b from-rose-500/10 via-transparent to-rose-500/10"></div>
+                </div>
+              </div>
+
+              <!-- Stream Info Bar -->
+              <div class="bg-slate-950 border-t border-slate-800 p-2.5 flex justify-between items-center text-[11px] text-slate-400">
+                <div>FPS: <span id="fpsVal" class="text-slate-200 font-mono">30</span></div>
+                <div>Res: <span id="resVal" class="text-slate-200 font-mono">1080p HD</span></div>
+                <div>Est. Size: <span id="estSizeVal" class="text-amber-400 font-mono">0.0 MB</span></div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Hidden Output Path Container for DOM references -->
+        <div class="hidden">
+          <span id="pathPreview"></span>
+        </div>
+
+      </section>
+
+      <!-- ================= TAB 2: DASHBOARD & ANALYTICS ================= -->
+      <section id="tab-dashboard" class="tab-page p-4 lg:p-6 hidden">
+        <div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div class="flex items-center gap-3">
+            <button onclick="switchTab('tab-station')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-xl border border-slate-700/80 flex items-center gap-2 transition-all shadow-sm">
+              <i class="fa-solid fa-arrow-left text-cyan-400"></i> Back to Packing Station
+            </button>
+            <div>
+              <h2 class="text-xl font-bold text-white">VMS Recording Analytics</h2>
+              <p class="text-xs text-slate-400">Overview of packing performance, daily totals, and marketplace volume</p>
+            </div>
+          </div>
+          <button id="btnRefreshStats" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs px-3 py-2 rounded-xl flex items-center gap-2 transition-all">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh Stats
+          </button>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <div class="text-xs text-slate-400 font-medium">Total Recordings</div>
+            <div id="statTotal" class="text-2xl font-bold font-mono text-cyan-400 mt-1">0</div>
+            <div class="text-[10px] text-slate-500 mt-1">All time saved videos</div>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <div class="text-xs text-slate-400 font-medium">Today's Scans</div>
+            <div id="statToday" class="text-2xl font-bold font-mono text-emerald-400 mt-1">0</div>
+            <div class="text-[10px] text-slate-500 mt-1">Recorded today</div>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <div class="text-xs text-slate-400 font-medium">This Week</div>
+            <div id="statWeekly" class="text-2xl font-bold font-mono text-amber-400 mt-1">0</div>
+            <div class="text-[10px] text-slate-500 mt-1">Current week total</div>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <div class="text-xs text-slate-400 font-medium">This Month</div>
+            <div id="statMonthly" class="text-2xl font-bold font-mono text-purple-400 mt-1">0</div>
+            <div class="text-[10px] text-slate-500 mt-1">Current month total</div>
+          </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <h3 class="text-sm font-bold text-slate-200 mb-4">Daily Packing Volume</h3>
+            <div class="h-64">
+              <canvas id="chartDaily"></canvas>
+            </div>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <h3 class="text-sm font-bold text-slate-200 mb-4">Marketplace Breakdown</h3>
+            <div class="h-64 flex items-center justify-center">
+              <canvas id="chartMarketplace"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 3: RECORDING LOGS & HISTORY ================= -->
+      <section id="tab-history" class="tab-page p-4 lg:p-6 hidden">
+        <div class="mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div class="flex items-center gap-3">
+            <button onclick="switchTab('tab-station')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-xl border border-slate-700/80 flex items-center gap-2 transition-all shadow-sm">
+              <i class="fa-solid fa-arrow-left text-cyan-400"></i> Back to Packing Station
+            </button>
+            <div>
+              <h2 class="text-xl font-bold text-white">AWB Recording Logs</h2>
+              <p class="text-xs text-slate-400">Searchable history and export reports</p>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button id="btnExportExcel" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3.5 py-2 rounded-xl flex items-center gap-2 transition-all font-semibold">
+              <i class="fa-solid fa-file-excel"></i> Export Excel Log
+            </button>
+            <label class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs px-3.5 py-2 rounded-xl flex items-center gap-2 cursor-pointer transition-all">
+              <i class="fa-solid fa-file-import text-cyan-400"></i> Import Manifest
+              <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" class="hidden">
+            </label>
+          </div>
+        </div>
+
+        <!-- Search & Filters -->
+        <div class="bg-slate-900 p-3 rounded-2xl border border-slate-800 mb-4 flex flex-col md:flex-row gap-3">
+          <div class="flex-1 relative">
+            <input type="text" id="logSearchInput" placeholder="Search by AWB, Marketplace, Date..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white pl-9 focus:outline-none focus:border-cyan-500">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
+          </div>
+          <select id="logMarketplaceFilter" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none">
+            <option value="ALL">All Marketplaces</option>
+            <option value="Flipkart">Flipkart</option>
+            <option value="Amazon">Amazon</option>
+            <option value="Myntra">Myntra</option>
+            <option value="AJIO">AJIO</option>
+            <option value="JioMart">JioMart</option>
+            <option value="Meesho">Meesho</option>
+            <option value="Other">Other Universal</option>
+          </select>
+        </div>
+
+        <!-- Logs Table -->
+        <div class="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-950 text-slate-400 border-b border-slate-800 font-semibold uppercase tracking-wider">
+                <tr>
+                  <th class="p-3">Timestamp</th>
+                  <th class="p-3">AWB Number</th>
+                  <th class="p-3">Marketplace</th>
+                  <th class="p-3">Duration</th>
+                  <th class="p-3">File Size</th>
+                  <th class="p-3">Saved Relative Folder</th>
+                  <th class="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="logsTableBody" class="divide-y divide-slate-800 text-slate-300 font-mono">
+                <tr>
+                  <td colspan="7" class="text-center py-6 text-slate-500 italic">No recording logs stored yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 4: SETTINGS & AUDIO/VIDEO ================= -->
+      <section id="tab-settings" class="tab-page p-4 lg:p-6 hidden">
+        <div class="flex items-center gap-3 mb-6">
+          <button onclick="switchTab('tab-station')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-xl border border-slate-700/80 flex items-center gap-2 transition-all shadow-sm">
+            <i class="fa-solid fa-arrow-left text-cyan-400"></i> Back to Packing Station
+          </button>
+          <div>
+            <h2 class="text-xl font-bold text-white">System Configuration</h2>
+            <p class="text-xs text-slate-400">Camera resolutions, microphone configuration, and storage preferences</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+            <h3 class="text-sm font-bold text-slate-200 border-b border-slate-800 pb-2">Camera & Audio Hardware</h3>
+            
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Default Camera Device</label>
+              <select id="settingCameraSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Video Recording Resolution</label>
+              <select id="settingResolution" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                <option value="1080p">1080p Full HD (1920x1080)</option>
+                <option value="720p">720p HD (1280x720)</option>
+                <option value="480p">480p SD (854x480)</option>
+              </select>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+              <div>
+                <div class="text-xs font-semibold text-slate-200">Include Audio Stream</div>
+                <div class="text-[11px] text-slate-400">Record microphone sound along with video</div>
+              </div>
+              <input type="checkbox" id="settingAudioEnabled" checked class="w-4 h-4 accent-cyan-600 rounded">
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-800/80">
+              <div>
+                <div class="text-xs font-semibold text-slate-200">Voice Announcement Alerts</div>
+                <div class="text-[11px] text-slate-400">Spoken "Start Recording" and "Stop Recording" alerts for operator</div>
+              </div>
+              <input type="checkbox" id="settingVoiceAlertEnabled" checked class="w-4 h-4 accent-cyan-600 rounded">
+            </div>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+            <h3 class="text-sm font-bold text-slate-200 border-b border-slate-800 pb-2">Storage Directory Configuration</h3>
+            
+            <div class="space-y-2">
+              <label class="block text-xs font-semibold text-slate-400">Root Directory Access</label>
+              <button id="btnSetDirectorySettings" class="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs rounded-xl flex items-center justify-center gap-2 transition-all">
+                <i class="fa-solid fa-folder-open text-amber-400"></i>
+                <span id="settingsDirLabel">Select Local Storage Directory</span>
+              </button>
+              <p class="text-[11px] text-slate-500">When enabled via File System Access API, folders (`Year/Month/Week/AWB`) are created automatically on your disk.</p>
+            </div>
+
+            <div class="pt-4 border-t border-slate-800">
+              <button id="btnClearData" class="text-xs text-rose-400 hover:text-rose-300 font-semibold flex items-center gap-1.5">
+                <i class="fa-solid fa-trash-can"></i> Clear Local DB History Logs
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- APPLICATION LOGIC SCRIPT -->
+  <script>
+    // System State Variables
+    let mediaStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
+    let activeAWB = null;
+    let recStartTime = null;
+    let recTimerInterval = null;
+    let selectedCameraId = "";
+    let micEnabled = true;
+    let voiceAlertEnabled = true;
+    let rootDirectoryHandle = null;
+
+    // Overlay State Variables for CCTV Overlay
+    let scanConfirmationTime = 0; // Timestamp when a new scan occurs
+    let recordingState = "IDLE";   // "IDLE", "REC", "SAVED"
+    let savedStateEndTime = 0;    // Timestamp when "SAVED" indicator should hide/reset
+    let lastScannedAWB = "";      // Preserved AWB number for video rendering
+
+    // Canvas Video Compositor for Real-time Watermarking
+    let canvasCompositor = document.getElementById("compositorCanvas");
+    let compositorCtx = canvasCompositor ? canvasCompositor.getContext("2d") : null;
+    let compositorAnimationId = null;
+    let compositedStream = null;
+
+    // Speech Synthesis Voice Alert Helper
+    let cachedFemaleVoice = null;
+
+    function initVoices() {
+      if (!('speechSynthesis' in window)) return;
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        cachedFemaleVoice = voices.find(v => 
+          v.lang.startsWith('en') && (
+            v.name.toLowerCase().includes('female') || 
+            v.name.toLowerCase().includes('zira') || 
+            v.name.toLowerCase().includes('samantha') || 
+            v.name.toLowerCase().includes('victoria') || 
+            v.name.toLowerCase().includes('karen') ||
+            v.name.toLowerCase().includes('google us english') ||
+            v.name.toLowerCase().includes('natural')
+          )
+        ) || voices.find(v => v.lang.startsWith('en'));
+      }
+    }
+
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = initVoices;
+      initVoices();
+    }
+
+    function speakAlert(text) {
+      if (!voiceAlertEnabled || !('speechSynthesis' in window)) return;
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.1;
+        utterance.volume = 1.0;
+
+        if (!cachedFemaleVoice) initVoices();
+        if (cachedFemaleVoice) utterance.voice = cachedFemaleVoice;
+
+        // Played strictly through system speaker output
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.error("Speech Synthesis Error:", err);
+      }
+    }
+
+    // Timer display update helper
+    function updateRecTimer() {
+      if (!recStartTime) return;
+      const elapsedSecs = Math.floor((Date.now() - recStartTime) / 1000);
+      const mins = String(Math.floor(elapsedSecs / 60)).padStart(2, '0');
+      const secs = String(elapsedSecs % 60).padStart(2, '0');
+      if (recTimerDisplay) {
+        recTimerDisplay.innerText = `${mins}:${secs}`;
+      }
+    }
+
+    // Toggle More Options Modal Menu
+    function toggleMoreOptionsModal() {
+      const modal = document.getElementById("moreOptionsModal");
+      modal.classList.toggle("hidden");
+    }
+
+    // Tab Navigation Switcher
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-page").forEach(page => page.classList.add("hidden"));
+      const target = document.getElementById(tabId);
+      if (target) target.classList.remove("hidden");
+      if (tabId === 'tab-dashboard') updateDashboardStats();
+      if (tabId === 'tab-history') loadLogsTable();
+    }
+
+    // Database Initialization (IndexedDB)
+    let db = null;
+    const request = indexedDB.open("ArkoVMS_DB", 1);
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      if (!db.objectStoreNames.contains("recordings")) {
+        const store = db.createObjectStore("recordings", { keyPath: "id", autoIncrement: true });
+        store.createIndex("awb", "awb", { unique: false });
+        store.createIndex("timestamp", "timestamp", { unique: false });
+      }
+    };
+    request.onsuccess = (e) => {
+      db = e.target.result;
+      loadLogsTable();
+      updateDashboardStats();
+    };
+
+    // UI Element References
+    const awbInput = document.getElementById("awbInput");
+    const currentAwbDisplay = document.getElementById("currentAwbDisplay");
+    const detectedMarketplace = document.getElementById("detectedMarketplace");
+    const webcamPreview = document.getElementById("webcamPreview");
+    const cameraSelect = document.getElementById("cameraSelect");
+    const settingCameraSelect = document.getElementById("settingCameraSelect");
+    const btnManualStart = document.getElementById("btnManualStart");
+    const btnManualStop = document.getElementById("btnManualStop");
+    const btnManualScan = document.getElementById("btnManualScan");
+    const btnToggleMic = document.getElementById("btnToggleMic");
+    const micIcon = document.getElementById("micIcon");
+    const micStatusText = document.getElementById("micStatusText");
+    const btnToggleVoiceAlert = document.getElementById("btnToggleVoiceAlert");
+    const voiceAlertIcon = document.getElementById("voiceAlertIcon");
+    const voiceAlertStatusText = document.getElementById("voiceAlertStatusText");
+    const recordingBadge = document.getElementById("recordingBadge");
+    const recTimerDisplay = document.getElementById("recTimerDisplay");
+    const dirNameDisplay = document.getElementById("dirNameDisplay");
+    const settingsDirLabel = document.getElementById("settingsDirLabel");
+    const camPlaceholder = document.getElementById("camPlaceholder");
+    const recordingScanOverlay = document.getElementById("recordingScanOverlay");
+    const recentScansFeed = document.getElementById("recentScansFeed");
+
+    // Marketplace Regex Detection
+    function detectMarketplace(awb) {
+      awb = awb.toUpperCase().trim();
+      if (/^FMPP\d+/i.test(awb) || /^FK\d+/i.test(awb)) return "Flipkart";
+      if (/^AMZ\d+/i.test(awb) || /^TBA\d+/i.test(awb) || /^40\d{8}/.test(awb)) return "Amazon";
+      if (/^MYN\d+/i.test(awb) || /^MY\d+/i.test(awb)) return "Myntra";
+      if (/^AJIO\d+/i.test(awb) || /^AJ\d+/i.test(awb)) return "AJIO";
+      if (/^JM\d+/i.test(awb) || /^JIO\d+/i.test(awb)) return "JioMart";
+      if (/^MEESH\d+/i.test(awb) || /^MS\d+/i.test(awb)) return "Meesho";
+      return "Other";
+    }
+
+    // Initialize Web Video Camera Stream
+    async function initCamera() {
+      try {
+        if (mediaStream) {
+          mediaStream.getTracks().forEach(track => track.stop());
+        }
+
+        const resVal = document.getElementById("settingResolution") ? document.getElementById("settingResolution").value : "1080p";
+        let width = 1920, height = 1080;
+        if (resVal === "720p") { width = 1280; height = 720; }
+        if (resVal === "480p") { width = 854; height = 480; }
+
+        const constraints = {
+          video: {
+            deviceId: selectedCameraId ? { exact: selectedCameraId } : undefined,
+            width: { ideal: width },
+            height: { ideal: height },
+            frameRate: { ideal: 30 }
+          },
+          audio: micEnabled
+        };
+
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        webcamPreview.srcObject = mediaStream;
+        camPlaceholder.classList.add("hidden");
+
+        await populateCameraList();
+        startWatermarkCompositor();
+      } catch (err) {
+        console.error("Camera Init Error:", err);
+        camPlaceholder.classList.remove("hidden");
+      }
+    }
+
+    // List Connected Cameras
+    async function populateCameraList() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+
+        cameraSelect.innerHTML = "";
+        settingCameraSelect.innerHTML = "";
+
+        videoDevices.forEach((device, index) => {
+          const option = document.createElement("option");
+          option.value = device.deviceId;
+          option.text = device.label || `Camera ${index + 1}`;
+          
+          if (device.deviceId === selectedCameraId) option.selected = true;
+
+          cameraSelect.appendChild(option.cloneNode(true));
+          settingCameraSelect.appendChild(option);
+        });
+      } catch (err) {
+        console.error("Enumerate Devices Error:", err);
+      }
+    }
+
+    // Real-time Video Overlay / Watermark Compositor Canvas
+    function startWatermarkCompositor() {
+      if (compositorAnimationId) cancelAnimationFrame(compositorAnimationId);
+
+      canvasCompositor.width = 1280;
+      canvasCompositor.height = 720;
+
+      function renderFrame() {
+        if (webcamPreview.readyState === webcamPreview.HAVE_ENOUGH_DATA) {
+          compositorCtx.drawImage(webcamPreview, 0, 0, canvasCompositor.width, canvasCompositor.height);
+
+          const now = new Date();
+          const timestampStr = now.toLocaleDateString() + " " + now.toLocaleTimeString();
+
+          // CCTV OVERLAY CONTAINER (Fully transparent background positioned at bottom-left)
+          const boxHeight = 110;
+          const boxX = 15;
+          const boxY = canvasCompositor.height - boxHeight - 15; // Positioned dynamically at bottom
+
+          // 1. BRANDING HEADER
+          compositorCtx.fillStyle = "#38bdf8";
+          compositorCtx.font = "bold 15px sans-serif";
+          compositorCtx.fillText("ARKO UNIVERSAL VMS", boxX + 15, boxY + 25);
+
+          // 2. AWB NUMBER DISPLAY (Directly above Date & Time in bold white text)
+          const awbText = activeAWB || lastScannedAWB || "NO AWB DETECTED";
+          compositorCtx.fillStyle = "#ffffff";
+          compositorCtx.font = "bold 16px monospace";
+          compositorCtx.fillText(`AWB: ${awbText}`, boxX + 15, boxY + 55);
+
+          // 3. DATE & TIME TABLE
+          compositorCtx.fillStyle = "#e2e8f0";
+          compositorCtx.font = "13px monospace";
+          compositorCtx.fillText(`TIME: ${timestampStr}`, boxX + 15, boxY + 85);
+
+          const currentTimeMs = Date.now();
+
+          // TOP RIGHT RECORDING / STATUS INDICATOR POSITIONING
+          const topRightX = canvasCompositor.width - 125;
+          const topRightY = 25;
+
+          // 4. GREEN SCAN CONFIRMATION FLASH EFFECT (For 1.5 seconds)
+          if (currentTimeMs - scanConfirmationTime < 1500) {
+            // Flash banner
+            compositorCtx.fillStyle = "rgba(16, 185, 129, 0.9)";
+            compositorCtx.fillRect(topRightX, topRightY, 95, 28);
+            compositorCtx.fillStyle = "#ffffff";
+            compositorCtx.font = "bold 11px sans-serif";
+            compositorCtx.fillText("✓ SCANNED", topRightX + 10, topRightY + 18);
+          } 
+          // 5. STATUS INDICATOR ("REC" with Blinking Light OR "SAVED") AT TOP RIGHT
+          else if (recordingState === "REC") {
+            // REC Badge
+            compositorCtx.fillStyle = "rgba(225, 29, 72, 0.85)";
+            compositorCtx.fillRect(topRightX, topRightY, 75, 28);
+            compositorCtx.fillStyle = "#ffffff";
+            compositorCtx.font = "bold 11px sans-serif";
+            compositorCtx.fillText("REC", topRightX + 32, topRightY + 18);
+
+            // Subtle Red Blinking Pulse Circle
+            if (Math.floor(currentTimeMs / 500) % 2 === 0) {
+              compositorCtx.beginPath();
+              compositorCtx.arc(topRightX + 17, topRightY + 14, 5, 0, 2 * Math.PI);
+              compositorCtx.fillStyle = "#ffffff";
+              compositorCtx.fill();
+            }
+          } else if (recordingState === "SAVED" || (currentTimeMs < savedStateEndTime)) {
+            // SAVED Badge
+            compositorCtx.fillStyle = "rgba(16, 185, 129, 0.85)";
+            compositorCtx.fillRect(topRightX, topRightY, 75, 28);
+            compositorCtx.fillStyle = "#ffffff";
+            compositorCtx.font = "bold 11px sans-serif";
+            compositorCtx.fillText("SAVED", topRightX + 18, topRightY + 18);
+          }
+        }
+        compositorAnimationId = requestAnimationFrame(renderFrame);
+      }
+      renderFrame();
+
+      // Get canvas stream for recorder
+      compositedStream = canvasCompositor.captureStream(30);
+      if (micEnabled && mediaStream && mediaStream.getAudioTracks().length > 0) {
+        compositedStream.addTrack(mediaStream.getAudioTracks()[0]);
+      }
+    }
+
+    // Start Recording Session
+    function startRecording(awbCode) {
+      if (isRecording) return;
+
+      activeAWB = awbCode.trim();
+      lastScannedAWB = activeAWB;
+      scanConfirmationTime = Date.now();
+      recordingState = "REC";
+
+      const mp = detectMarketplace(activeAWB);
+
+      currentAwbDisplay.innerText = activeAWB;
+      detectedMarketplace.innerText = mp;
+      detectedMarketplace.className = "inline-block px-3 py-1 rounded-lg text-xs font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30";
+
+      recordedChunks = [];
+      const streamToUse = compositedStream || mediaStream;
+
+      try {
+        let options = { mimeType: 'video/webm;codecs=vp9,opus' };
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          options = { mimeType: 'video/webm;codecs=vp8,opus' };
+        }
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          options = { mimeType: 'video/webm' };
+        }
+
+        mediaRecorder = new MediaRecorder(streamToUse, options);
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(streamToUse);
+      }
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = saveRecordingFile;
+
+      mediaRecorder.start(1000);
+      isRecording = true;
+      recStartTime = Date.now();
+
+      // Update UI Status
+      recordingBadge.classList.remove("hidden");
+      recordingScanOverlay.classList.remove("hidden");
+      btnManualStart.disabled = true;
+      btnManualStart.classList.add("opacity-50", "cursor-not-allowed");
+      btnManualStop.disabled = false;
+      btnManualStop.classList.remove("disabled", "bg-rose-600/50", "text-slate-400", "cursor-not-allowed");
+      btnManualStop.classList.add("bg-rose-600", "hover:bg-rose-500", "text-white");
+
+      recTimerInterval = setInterval(updateRecTimer, 1000);
+      speakAlert("Recording Started");
+    }
+
+    // Stop Recording Session
+    function stopRecording() {
+      if (!isRecording || !mediaRecorder) return;
+
+      recordingState = "SAVED";
+      savedStateEndTime = Date.now() + 3000;
+
+      mediaRecorder.stop();
+      isRecording = false;
+      clearInterval(recTimerInterval);
+
+      recordingBadge.classList.add("hidden");
+      recordingScanOverlay.classList.add("hidden");
+
+      btnManualStart.disabled = false;
+      btnManualStart.classList.remove("opacity-50", "cursor-not-allowed");
+      btnManualStop.disabled = true;
+      btnManualStop.classList.add("bg-rose-600/50", "text-slate-400", "cursor-not-allowed");
+      btnManualStop.classList.remove("bg-rose-600", "hover:bg-rose-500", "text-white");
+
+      speakAlert("Recording Stopped and Saved");
+    }
+
+    // Save Recording File & Push Log Entry
+    async function saveRecordingFile() {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const durationSecs = Math.max(1, Math.floor((Date.now() - recStartTime) / 1000));
+      const fileSizeMB = (blob.size / (1024 * 1024)).toFixed(2);
+      const timestamp = new Date();
+      const mp = detectMarketplace(activeAWB);
+
+      // Folder structure calculation: Year/Month/Week
+      const year = timestamp.getFullYear();
+      const month = timestamp.toLocaleString('default', { month: 'short' });
+      const dateNum = timestamp.getDate();
+      const weekNum = `Week_${Math.ceil(dateNum / 7)}`;
+      const relativePath = `${year}/${month}/${weekNum}/${activeAWB}`;
+      const fileName = `${activeAWB}_${timestamp.getTime()}.webm`;
+
+      // Save using File System Access API if directory is configured
+      if (rootDirectoryHandle) {
+        try {
+          let yDir = await rootDirectoryHandle.getDirectoryHandle(String(year), { create: true });
+          let mDir = await yDir.getDirectoryHandle(month, { create: true });
+          let wDir = await mDir.getDirectoryHandle(weekNum, { create: true });
+          let awbDir = await wDir.getDirectoryHandle(activeAWB, { create: true });
+          let fileHandle = await awbDir.getFileHandle(fileName, { create: true });
+          let writable = await fileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        } catch (err) {
+          console.error("FileSystem Storage Error, fallback to download:", err);
+          downloadFallback(blob, fileName);
+        }
+      } else {
+        downloadFallback(blob, fileName);
+      }
+
+      // Save Metadata to IndexedDB
+      const record = {
+        awb: activeAWB,
+        marketplace: mp,
+        duration: `${durationSecs}s`,
+        fileSize: `${fileSizeMB} MB`,
+        relativePath: relativePath,
+        timestamp: timestamp.toISOString(),
+        videoBlob: blob
+      };
+
+      if (db) {
+        const tx = db.transaction("recordings", "readwrite");
+        tx.objectStore("recordings").add(record);
+      }
+
+      addRecentFeedItem(record);
+      currentAwbDisplay.innerText = "NO ACTIVE AWB";
+      detectedMarketplace.innerText = "No Marketplace";
+      detectedMarketplace.className = "inline-block px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700";
+      activeAWB = null;
+    }
+
+    // Fallback Browser Download
+    function downloadFallback(blob, fileName) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    }
+
+    // Append Recent Scan Feed UI
+    function addRecentFeedItem(rec) {
+      if (recentScansFeed.children[0]?.classList.contains('italic')) {
+        recentScansFeed.innerHTML = "";
+      }
+      const item = document.createElement("div");
+      item.className = "bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex justify-between items-center text-xs";
+      item.innerHTML = `
+        <div>
+          <div class="font-mono font-bold text-slate-200">${rec.awb}</div>
+          <div class="text-[10px] text-slate-400">${rec.marketplace} &bull; ${rec.duration} &bull; ${rec.fileSize}</div>
+        </div>
+        <span class="text-emerald-400 text-[10px] font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">Saved</span>
+      `;
+      recentScansFeed.prepend(item);
+    }
+
+    // Handle Scan Keystroke / Barcode Scanner Input
+    function handleAwbInput(scannedVal) {
+      scannedVal = scannedVal.trim();
+      if (!scannedVal) return;
+
+      awbInput.value = "";
+
+      if (isRecording) {
+        if (scannedVal.toUpperCase() === activeAWB.toUpperCase()) {
+          stopRecording();
+        } else {
+          stopRecording();
+          setTimeout(() => startRecording(scannedVal), 600);
+        }
+      } else {
+        startRecording(scannedVal);
+      }
+    }
+
+    // Load History Logs Table
+    function loadLogsTable() {
+      if (!db) return;
+      const tbody = document.getElementById("logsTableBody");
+      const search = document.getElementById("logSearchInput").value.toLowerCase();
+      const filterMp = document.getElementById("logMarketplaceFilter").value;
+
+      const tx = db.transaction("recordings", "readonly");
+      const store = tx.objectStore("recordings");
+      const req = store.getAll();
+
+      req.onsuccess = () => {
+        let logs = req.result.reverse();
+
+        if (filterMp !== "ALL") {
+          logs = logs.filter(l => l.marketplace === filterMp);
+        }
+        if (search) {
+          logs = logs.filter(l => l.awb.toLowerCase().includes(search) || l.marketplace.toLowerCase().includes(search) || l.relativePath.toLowerCase().includes(search));
+        }
+
+        if (logs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-slate-500 italic">No recording logs stored matching filter.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = logs.map(l => `
+          <tr class="hover:bg-slate-800/50 transition-all">
+            <td class="p-3 text-slate-400">${new Date(l.timestamp).toLocaleString()}</td>
+            <td class="p-3 font-bold text-cyan-400">${l.awb}</td>
+            <td class="p-3"><span class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-slate-300">${l.marketplace}</span></td>
+            <td class="p-3 text-slate-300">${l.duration}</td>
+            <td class="p-3 text-slate-300">${l.fileSize}</td>
+            <td class="p-3 text-slate-400 text-[11px] truncate max-w-xs" title="${l.relativePath}">${l.relativePath}</td>
+            <td class="p-3 text-right">
+              <button onclick="downloadLogVideo(${l.id})" class="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-semibold rounded-lg transition-all" title="Download Recording">
+                <i class="fa-solid fa-download"></i>
+              </button>
+            </td>
+          </tr>
+        `).join("");
+      };
+    }
+
+    // Download Video Blob from DB ID
+    function downloadLogVideo(id) {
+      if (!db) return;
+      const tx = db.transaction("recordings", "readonly");
+      const req = tx.objectStore("recordings").get(id);
+      req.onsuccess = () => {
+        const rec = req.result;
+        if (rec && rec.videoBlob) {
+          downloadFallback(rec.videoBlob, `${rec.awb}.webm`);
+        }
+      };
+    }
+
+    // Dashboard Stats & Analytics Update
+    let dailyChart = null;
+    let mpChart = null;
+
+    function updateDashboardStats() {
+      if (!db) return;
+      const tx = db.transaction("recordings", "readonly");
+      const req = tx.objectStore("recordings").getAll();
+
+      req.onsuccess = () => {
+        const logs = req.result;
+        const now = new Date();
+
+        const todayStr = now.toDateString();
+        const todayLogs = logs.filter(l => new Date(l.timestamp).toDateString() === todayStr);
+
+        document.getElementById("statTotal").innerText = logs.length;
+        document.getElementById("statToday").innerText = todayLogs.length;
+
+        // Weekly & Monthly calculations
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const weeklyLogs = logs.filter(l => new Date(l.timestamp) >= oneWeekAgo);
+        document.getElementById("statWeekly").innerText = weeklyLogs.length;
+
+        const monthlyLogs = logs.filter(l => new Date(l.timestamp).getMonth() === now.getMonth() && new Date(l.timestamp).getFullYear() === now.getFullYear());
+        document.getElementById("statMonthly").innerText = monthlyLogs.length;
+
+        // Render Charts
+        renderAnalyticsCharts(logs);
+      };
+    }
+
+    function renderAnalyticsCharts(logs) {
+      // Marketplace aggregation
+      const mpCounts = {};
+      logs.forEach(l => {
+        mpCounts[l.marketplace] = (mpCounts[l.marketplace] || 0) + 1;
+      });
+
+      const mpCtx = document.getElementById("chartMarketplace");
+      if (mpCtx) {
+        if (mpChart) mpChart.destroy();
+        mpChart = new Chart(mpCtx, {
+          type: 'doughnut',
+          data: {
+            labels: Object.keys(mpCounts),
+            datasets: [{
+              data: Object.values(mpCounts),
+              backgroundColor: ['#0284c7', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1']
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#94a3b8' } } }
+          }
+        });
+      }
+
+      // Daily aggregation
+      const dailyCtx = document.getElementById("chartDaily");
+      if (dailyCtx) {
+        const daysMap = {};
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          daysMap[d.toLocaleDateString('default', { weekday: 'short' })] = 0;
+        }
+
+        logs.forEach(l => {
+          const dayName = new Date(l.timestamp).toLocaleDateString('default', { weekday: 'short' });
+          if (daysMap[dayName] !== undefined) daysMap[dayName]++;
+        });
+
+        if (dailyChart) dailyChart.destroy();
+        dailyChart = new Chart(dailyCtx, {
+          type: 'bar',
+          data: {
+            labels: Object.keys(daysMap),
+            datasets: [{
+              label: 'Scans',
+              data: Object.values(daysMap),
+              backgroundColor: '#0284c7',
+              borderRadius: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+              y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } }
+            },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+    }
+
+    // Set Directory Handle using File System Access API
+    async function selectRootDirectory() {
+      if ('showDirectoryPicker' in window) {
+        try {
+          rootDirectoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+          dirNameDisplay.innerText = rootDirectoryHandle.name;
+          settingsDirLabel.innerText = `Directory: ${rootDirectoryHandle.name}`;
+        } catch (err) {
+          console.error("Directory Selection Cancelled or Failed:", err);
+        }
+      } else {
+        alert("File System Access API is not supported in this browser. Downloads will fallback to browser prompts.");
+      }
+    }
+
+    // Excel Log Export Functionality
+    function exportLogsToExcel() {
+      if (!db) return;
+      const tx = db.transaction("recordings", "readonly");
+      const req = tx.objectStore("recordings").getAll();
+
+      req.onsuccess = () => {
+        const logs = req.result.map(l => ({
+          Timestamp: new Date(l.timestamp).toLocaleString(),
+          AWB: l.awb,
+          Marketplace: l.marketplace,
+          Duration: l.duration,
+          FileSize: l.fileSize,
+          SavedFolder: l.relativePath
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(logs);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "AWB_Packing_Logs");
+        XLSX.writeFile(wb, `ARKO_VMS_Logs_${Date.now()}.xlsx`);
+      };
+    }
+
+    // Setup Event Listeners
+    window.onload = () => {
+      // Live Clock & Date
+      setInterval(() => {
+        const d = new Date();
+        document.getElementById("liveClock").innerText = d.toLocaleTimeString();
+        document.getElementById("liveDate").innerText = d.toLocaleDateString('default', { day: '2-digit', month: 'short', year: 'numeric' });
+      }, 1000);
+
+      // Camera Controls
+      cameraSelect.addEventListener("change", (e) => {
+        selectedCameraId = e.target.value;
+        initCamera();
+      });
+      settingCameraSelect.addEventListener("change", (e) => {
+        selectedCameraId = e.target.value;
+        initCamera();
+      });
+
+      // Mic Toggle
+      btnToggleMic.addEventListener("click", () => {
+        micEnabled = !micEnabled;
+        micIcon.className = micEnabled ? "fa-solid fa-microphone text-emerald-400" : "fa-solid fa-microphone-slash text-rose-400";
+        micStatusText.innerText = micEnabled ? "Mic On" : "Mic Off";
+        initCamera();
+      });
+
+      // Voice Alert Toggle
+      btnToggleVoiceAlert.addEventListener("click", () => {
+        voiceAlertEnabled = !voiceAlertEnabled;
+        voiceAlertIcon.className = voiceAlertEnabled ? "fa-solid fa-volume-high text-cyan-400" : "fa-solid fa-volume-xmark text-slate-500";
+        voiceAlertStatusText.innerText = voiceAlertEnabled ? "Voice Alert On" : "Voice Alert Off";
+        const voiceChk = document.getElementById("settingVoiceAlertEnabled");
+        if (voiceChk) voiceChk.checked = voiceAlertEnabled;
+      });
+
+      const voiceChk = document.getElementById("settingVoiceAlertEnabled");
+      if (voiceChk) {
+        voiceChk.addEventListener("change", (e) => {
+          voiceAlertEnabled = e.target.checked;
+          voiceAlertIcon.className = voiceAlertEnabled ? "fa-solid fa-volume-high text-cyan-400" : "fa-solid fa-volume-xmark text-slate-500";
+          voiceAlertStatusText.innerText = voiceAlertEnabled ? "Voice Alert On" : "Voice Alert Off";
+        });
+      }
+
+      // Scanner Keypress
+      awbInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleAwbInput(awbInput.value);
+        }
+      });
+      btnManualScan.addEventListener("click", () => handleAwbInput(awbInput.value));
+
+      btnManualStart.addEventListener("click", () => {
+        const val = awbInput.value.trim() || `MANUAL_${Date.now()}`;
+        startRecording(val);
+      });
+      btnManualStop.addEventListener("click", stopRecording);
+
+      // Directory Setup Buttons
+      document.getElementById("btnSetDirectory").addEventListener("click", selectRootDirectory);
+      document.getElementById("btnSetDirectorySettings").addEventListener("click", selectRootDirectory);
+
+      // History Search / Export Controls
+      document.getElementById("logSearchInput").addEventListener("input", loadLogsTable);
+      document.getElementById("logMarketplaceFilter").addEventListener("change", loadLogsTable);
+      document.getElementById("btnExportExcel").addEventListener("click", exportLogsToExcel);
+      document.getElementById("btnRefreshStats").addEventListener("click", updateDashboardStats);
+
+      // Clear Local IndexedDB Data
+      document.getElementById("btnClearData").addEventListener("click", () => {
+        if (confirm("Are you sure you want to clear all stored history logs?")) {
+          const tx = db.transaction("recordings", "readwrite");
+          tx.objectStore("recordings").clear();
+          loadLogsTable();
+          updateDashboardStats();
+        }
+      });
+
+      // Init Camera Stream
+      initCamera();
+    };
+  </script>
+</body>
+</html>
